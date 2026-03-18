@@ -59,7 +59,7 @@ public class MiniMap extends Widget {
     public List<DisplayIcon> icons = Collections.emptyList();
     protected Locator setloc;
     protected boolean follow;
-    protected int zoomlevel = 0, maglevel = Utils.clip((int)Math.round(Math.log(UI.scale(1.0)) / Math.log(2)), 0, 3);
+    protected int zoomlevel = 0, maglevel = 1 << Utils.clip((int)Math.round(Math.log(UI.scale(1.0)) / Math.log(2)), 0, 3);
     protected DisplayGrid[] display;
     protected Area dgext, dtext;
     protected Segment dseg;
@@ -96,6 +96,10 @@ public class MiniMap extends Widget {
 	    Objects.requireNonNull(tc);
 	    this.seg = seg; this.tc = tc;
 	}
+
+	public String toString() {
+	    return(String.format("(%d, %d) @ %s", tc.x, tc.y, Long.toUnsignedString(seg.id, 16)));
+	}
     }
 
     public interface Locator {
@@ -113,8 +117,11 @@ public class MiniMap extends Widget {
 	    MCache map = sess.glob.map;
 	    if(lastgrid != null) {
 		synchronized(map.grids) {
-		    if(map.grids.get(lastgrid.gc) == lastgrid)
-			return(lastloc);
+		    if(map.grids.get(lastgrid.gc) == lastgrid) {
+			GridInfo info = file.gridinfo.get(lastgrid.id);
+			if((info != null) && (info.seg == lastloc.seg.id))
+			    return(lastloc);
+		    }
 		}
 		lastgrid = null;
 		lastloc = null;
@@ -191,14 +198,14 @@ public class MiniMap extends Widget {
 	Location dloc = this.dloc;
 	if((dloc == null) || (dloc.seg != loc.seg))
 	    return(null);
-	return(loc.tc.sub(dloc.tc).div(scalef()).add(sz.div(2)));
+	return(l2dscale(loc.tc.sub(dloc.tc)).add(sz.div(2)));
     }
 
     public Location xlate(Coord sc) {
 	Location dloc = this.dloc;
 	if(dloc == null)
 	    return(null);
-	Coord tc = sc.sub(sz.div(2)).mul(scalef()).add(dloc.tc);
+	Coord tc = d2lscale(sc.sub(sz.div(2))).add(dloc.tc);
 	return(new Location(dloc.seg, tc));
     }
 
@@ -269,7 +276,7 @@ public class MiniMap extends Widget {
 	public Coord sc = null;
 	public double ang = 0.0;
 	public int z;
-	public double stime;
+	public double stime, ntime;
 	public boolean notify;
 	private Consumer<UI> snotify;
 	private boolean markchecked;
@@ -279,7 +286,7 @@ public class MiniMap extends Widget {
 	    this.gob = attr.gob;
 	    this.icon = attr.icon();
 	    this.z = icon.z();
-	    this.stime = Utils.rtime();
+	    this.stime = ui.lasttick;
 	    this.conf = conf;
 	    if(this.notify = conf.notify)
 		this.snotify = conf.notification();
@@ -288,6 +295,12 @@ public class MiniMap extends Widget {
 	public void update(Coord2d rc, double ang) {
 	    this.rc = rc;
 	    this.ang = ang;
+	    if(notify) {
+		if((ntime = (ui.lasttick - stime) * 0.5) > 1.0) {
+		    notify = false;
+		    snotify = null;
+		}
+	    }
 	}
 
 	public void dispupdate() {
@@ -300,18 +313,13 @@ public class MiniMap extends Widget {
 	public void draw(GOut g) {
 	    icon.draw(g, sc);
 	    if(notify) {
-		double t = (Utils.rtime() - stime) * 1.0;
-		if(t > 1) {
-		    notify = false;
-		} else {
-		    double f = 1.0 + (Math.pow(Math.sin(t * Math.PI * 1.5), 2) * 1.0);
-		    double a = (t < 0.5) ? 0.5 : (0.5 - (t - 0.5));
-		    g.usestate(new ColorMask(notifcol));
-		    g.usestate(new Scale2D(sc.add(g.tx), (float)f));
-		    g.chcolor(255, 255, 255, (int)Math.round(255 * a));
-		    icon.draw(g, sc);
-		    g.defstate();
-		}
+		double f = 1.0 + (Math.pow(Math.sin(ntime * Math.PI * 1.5), 2) * 1.0);
+		double a = (ntime < 0.5) ? 0.5 : (0.5 - (ntime - 0.5));
+		g.usestate(new ColorMask(notifcol));
+		g.usestate(new Scale2D(sc.add(g.tx), (float)f));
+		g.chcolor(255, 255, 255, (int)Math.round(255 * a));
+		icon.draw(g, sc);
+		g.defstate();
 	    }
 	    if(snotify != null) {
 		snotify.accept(ui);
@@ -587,16 +595,12 @@ public class MiniMap extends Widget {
 	}
     }
 
-    private float scalef() {
-	return(Math.scalb(1f, dlvl - dmag));
+    private Coord l2dscale(Coord c) {
+	return(c.mul(dmag).div(1 << dlvl));
     }
 
-    private Coord scalec(Coord c) {
-	int f = dlvl - dmag;
-	if(f < 0)
-	    return(c.div(1 << -f));
-	else
-	    return(c.mul(1 << f));
+    private Coord d2lscale(Coord c) {
+	return(c.mul(1 << dlvl).div(dmag));
     }
 
     private Coord rscalec(Coord c) {
@@ -608,7 +612,7 @@ public class MiniMap extends Widget {
     }
 
     public Coord st2c(Coord tc) {
-	return(tc.add(sessloc.tc).sub(dloc.tc).div(scalef()).add(sz.div(2)));
+	return(l2dscale(tc.add(sessloc.tc).sub(dloc.tc)).add(sz.div(2)));
     }
 
     public Coord p2c(Coord2d pc) {
@@ -618,9 +622,9 @@ public class MiniMap extends Widget {
     private void redisplay(Location loc) {
 	Coord hsz = sz.div(2);
 	Coord zmaps = cmaps.mul(1 << zoomlevel);
-	Area next = Area.sized(loc.tc.sub(hsz.mul(1 << zoomlevel).div(1 << maglevel)).div(zmaps),
-			       sz.div(1 << maglevel).div(cmaps).add(2, 2));
-	if((display == null) || (loc.seg != dseg) || (zoomlevel != dlvl) || !next.equals(dgext)) {
+	Area next = Area.sized(loc.tc.sub(hsz.mul(1 << zoomlevel).div(maglevel)).div(zmaps),
+			       sz.div(maglevel).div(cmaps).add(2, 2));
+	if((display == null) || (loc.seg != dseg) || (zoomlevel != dlvl) || (maglevel != dmag) || !next.equals(dgext)) {
 	    DisplayGrid[] nd = new DisplayGrid[next.rsz()];
 	    if((display != null) && (loc.seg == dseg) && (zoomlevel == dlvl)) {
 		for(Coord c : dgext) {
@@ -655,7 +659,7 @@ public class MiniMap extends Widget {
 	    disp.dc = ul;
 	    Tex img = disp.img();
 	    if(img != null)
-		g.image(img, ul, img.sz().mul(1 << dmag));
+		g.image(img, ul, img.sz().mul(dmag));
 	} catch(Loading l) {
 	}
     }
@@ -663,7 +667,7 @@ public class MiniMap extends Widget {
     public void drawmap(GOut g) {
 	Coord hsz = sz.div(2);
 	for(Coord c : dgext) {
-	    Coord ul = c.mul(cmaps).mul(1 << dmag).sub(dloc.tc.div(scalef())).add(hsz);
+	    Coord ul = c.mul(cmaps).mul(dmag).sub(l2dscale(dloc.tc)).add(hsz);
 	    DisplayGrid disp = display[dgext.ri(c)];
 	    if(disp == null)
 		continue;
@@ -680,7 +684,7 @@ public class MiniMap extends Widget {
 	    for(DisplayMarker mark : dgrid.markers(true, ui)) {
 		if(filter(mark))
 		    continue;
-		mark.draw(g, mark.m.tc.sub(dloc.tc).div(scalef()).add(hsz), 1 << dmag, ui, file, big);
+		mark.draw(g, l2dscale(mark.m.tc).sub(l2dscale(dloc.tc)).add(hsz));
 	    }
 	}
     }
@@ -706,7 +710,6 @@ public class MiniMap extends Widget {
 			    DisplayIcon disp = pmap.remove(icon);
 			    if(disp == null)
 				disp = new DisplayIcon(icon, conf);
-			    disp.update(gob.rc, gob.a);
 			    ret.add(disp);
 			}
 		    }
@@ -717,6 +720,8 @@ public class MiniMap extends Widget {
 	    if(disp.force())
 		ret.add(disp);
 	}
+	for(DisplayIcon disp : ret)
+	    disp.update(disp.gob.rc, disp.gob.a);
 	Collections.sort(ret, (a, b) -> a.z - b.z);
 	if(ret.size() == 0)
 	    return(Collections.emptyList());
@@ -851,7 +856,7 @@ public class MiniMap extends Widget {
 	if((dloc == null) || (dgext == null))
 	    return(null);
 	Coord hsz = sz.div(2);
-	Coord gc = dloc.tc.add(scalec(sc.sub(hsz))).div(cmaps.mul(1 << dlvl));
+	Coord gc = dloc.tc.add(d2lscale(sc.sub(hsz))).div(cmaps.mul(1 << dlvl));
 	if(!dgext.contains(gc))
 	    return(null);
 	return(display[dgext.ri(gc)]);
@@ -875,7 +880,7 @@ public class MiniMap extends Widget {
 		continue;
 	    for(DisplayMarker mark : dgrid.markers(false, ui)) {
 	        Area hit = mark.hit(ui);
-		if((hit != null) && hit.contains(tc.sub(mark.m.tc).div(scalef())) && !filter(mark))
+		if((hit != null) && hit.contains(l2dscale(tc).sub(l2dscale(mark.m.tc))) && !filter(mark))
 		    return(mark);
 	    }
 	}
@@ -996,7 +1001,7 @@ public class MiniMap extends Widget {
 	    if(dragging) {
 		setloc = null;
 		follow = false;
-		curloc = new Location(curloc.seg, dmc.add(dsc.sub(ev.c).mul(scalef())));
+		curloc = new Location(curloc.seg, dmc.add(d2lscale(dsc.sub(ev.c))));
 	    } else if(ev.c.dist(dsc) > 5) {
 		dragging = true;
 	    }
@@ -1026,8 +1031,8 @@ public class MiniMap extends Widget {
 
     public boolean mousewheel(MouseWheelEvent ev) {
 	if(ev.a > 0) {
-	    if(maglevel > 0) {
-		maglevel--;
+	    if(maglevel > 1) {
+		maglevel >>= 1;
 	    } else {
 		if(allowzoomout())
 		    zoomlevel = Math.min(zoomlevel + 1, dlvl + 1);
@@ -1036,7 +1041,7 @@ public class MiniMap extends Widget {
 	    if(zoomlevel > 0) {
 		zoomlevel--;
 	    } else {
-		maglevel = Math.min(maglevel + 1, 3);
+		maglevel = Math.min(maglevel << 1, 8);
 	    }
 	}
 	return(true);
@@ -1050,7 +1055,7 @@ public class MiniMap extends Widget {
 	    if((grid != null) && (grid.dc != null)) {
 		DataGrid dgrid = grid.gref.get();
 		if(dgrid != null) {
-		    Coord gc = c.sub(grid.dc).div(1 << dmag);
+		    Coord gc = c.sub(grid.dc).div(dmag);
 		    gc = Area.sized(cmaps).closest(gc); /* XXX: This should not be necessary. */
 		    TileInfo tile = dgrid.tilesets[dgrid.gettile(gc)];
 		    if(tile != null) {
