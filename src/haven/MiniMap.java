@@ -603,14 +603,6 @@ public class MiniMap extends Widget {
 	return(c.mul(1 << dlvl).div(dmag));
     }
 
-    private Coord rscalec(Coord c) {
-	int f = dlvl - dmag;
-	if(f < 0)
-	    return(c.mul(1 << -f));
-	else
-	    return(c.div(1 << f));
-    }
-
     public Coord st2c(Coord tc) {
 	return(l2dscale(tc.add(sessloc.tc).sub(dloc.tc)).add(sz.div(2)));
     }
@@ -684,7 +676,7 @@ public class MiniMap extends Widget {
 	    for(DisplayMarker mark : dgrid.markers(true, ui)) {
 		if(filter(mark))
 		    continue;
-		mark.draw(g, l2dscale(mark.m.tc).sub(l2dscale(dloc.tc)).add(hsz));
+		mark.draw(g, l2dscale(mark.m.tc).sub(l2dscale(dloc.tc)).add(hsz), dmag, ui, file, big);
 	    }
 	}
     }
@@ -1147,8 +1139,8 @@ public class MiniMap extends Widget {
     
     void drawgrid(GOut g) {
 	int zmult = 1 << zoomlevel;
-	Coord offset = sz.div(2).sub(dloc.tc.div(scalef()));
-	Coord zmaps = rscalec(cmaps);
+	Coord offset = sz.div(2).sub(l2dscale(dloc.tc));
+	Coord zmaps = l2dscale(cmaps);
     
 	double width = 1f;
 	Color col = g.getcolor();
@@ -1183,7 +1175,7 @@ public class MiniMap extends Widget {
 	Gob player = player();
 	if(player != null) {
 	    Coord rc = p2c(player.rc.floor(sgridsz).sub(4, 4).mul(sgridsz));
-	    Coord viewsz = rscalec(VIEW_SZ);
+	    Coord viewsz = l2dscale(VIEW_SZ);
 	    g.chcolor(VIEW_BG_COLOR);
 	    g.frect(rc, viewsz);
 	    g.chcolor(VIEW_BORDER_COLOR);
