@@ -1,3 +1,7 @@
+$size[14]{$u{Update for 18.03.26:}
+ * merged loftar's changes
+ * fixed smelting timer related crash
+ 
 $size[14]{$u{Update for 06.03.26:}
   * fixed beehive and troughs not showing their radius
  
