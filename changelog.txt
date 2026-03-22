@@ -1,3 +1,6 @@
+$size[14]{$u{Update for 22.03.26:}
+  * fixed flat terrain and similar options not applying immediately upon change
+ 
 $size[14]{$u{Update for 18.03.26:}
  * merged loftar's changes
  * fixed smelting timer related crash
