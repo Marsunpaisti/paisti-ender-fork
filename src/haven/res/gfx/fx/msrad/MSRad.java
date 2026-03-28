@@ -11,8 +11,6 @@ import haven.*;
 import haven.render.*;
 import me.ender.ClientUtils;
 
-/* >spr: MSRad */
-@haven.FromResource(name = "gfx/fx/msrad", version = 16)
 public class MSRad extends Sprite {
     public static boolean show = false;
     public static Collection<MSRad> current = new WeakList<>();
