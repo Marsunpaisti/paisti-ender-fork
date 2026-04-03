@@ -38,11 +38,13 @@ import haven.MiniMap.*;
 import haven.MiniMap.Location;
 import haven.BuddyWnd.GroupSelector;
 
+import haven.render.*;
 import me.ender.QuestCondition;
 import me.ender.minimap.*;
 import static haven.MCache.tilesz;
 import static haven.MCache.cmaps;
-import static haven.Utils.eq;
+import static haven.Utils.*;
+
 import javax.swing.JFileChooser;
 import javax.swing.filechooser.*;
 
@@ -315,7 +317,7 @@ public class MapWnd extends WindowX implements Console.Directory {
     }
 
     private class View extends MiniMap {
-	private double a = 0;
+	private double tileHighlightAlpha = 0;
 	
 	View(MapFile file) {
 	    super(file);
@@ -329,7 +331,7 @@ public class MapWnd extends WindowX implements Console.Directory {
 		    int alpha = olalpha;
 		    Tex img;
 		    if(TileHighlight.TAG.equals(tag)) {
-			alpha = (int) (100 + 155 * a);
+			alpha = (int) (100 + 155 * tileHighlightAlpha);
 			img = disp.tileimg();
 		    } else {
 			img = disp.olimg(tag);
@@ -359,7 +361,7 @@ public class MapWnd extends WindowX implements Console.Directory {
 		Gob gob = MarkerID.find(ui.sess.glob.oc, mark.m);
 		if(gob != null)
 		    mvclick(mv, null, loc, gob, button);
-		if(button == 3 && !press && !domark && !((SMarker) mark.m).questConditions.isEmpty())
+		if(button == 3 && !press && !((SMarker) mark.m).questConditions.isEmpty())
 		{
 		    QuestCondition questCondition = ((SMarker) mark.m).questIterator.next();
 		    if (questCondition != null)
@@ -395,6 +397,12 @@ public class MapWnd extends WindowX implements Console.Directory {
 	    g.frect(Coord.z, sz);
 	    g.chcolor();
 	    super.draw(g);
+	}
+
+	@Override
+	public void tick(double dt) {
+	    super.tick(dt);
+	    tileHighlightAlpha = Math.sin(Math.PI * ((System.currentTimeMillis() % 1000) / 1000.0));
 	}
     }
 
@@ -475,12 +483,6 @@ public class MapWnd extends WindowX implements Console.Directory {
 
 	public boolean getcurs(CursorQuery ev) {
 	    return(ev.grabbed ? ev.set(markcurs) : false);
-	}
-    
-	@Override
-	public void tick(double dt) {
-	    super.tick(dt);
-	    a = Math.sin(Math.PI * ((System.currentTimeMillis() % 1000) / 1000.0));
 	}
     }
 
@@ -1416,11 +1418,12 @@ public class MapWnd extends WindowX implements Console.Directory {
 	    mebtn.c = new Coord(0, sz.y - mebtn.sz.y - UI.scale(5));
 	    mibtn.c = new Coord(sz.x - btnw, sz.y - mibtn.sz.y - UI.scale(5));
 	    if(namesel != null) {
-		namesel.c = listf.c.add(0, listf.sz.y + UI.scale(10));
+		namesel.c = listf.c.add(0, listf.sz.y + UI.scale(5));
 		if(colsel != null) {
-		    colsel.c = namesel.c.add(0, namesel.sz.y + UI.scale(10));
+		    colsel.c = namesel.c.add(0, namesel.sz.y + UI.scale(5));
+		    onmapbtn.c =  colsel.c.add(0,  colsel.sz.y + UI.scale(5));
 		}
-		int y = namesel.sz.y + BuddyWnd.margin3 + UI.scale(20);
+		int y = namesel.sz.y + BuddyWnd.margin3 + UI.scale(30);
 		mremove.c = namesel.c.add(0, y);
 		mtrack.c = namesel.c.add(UI.scale(105), y);
 	    }

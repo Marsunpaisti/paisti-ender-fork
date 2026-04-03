@@ -52,7 +52,7 @@ import me.ender.ChatCommands;
 import me.ender.CustomCursors;
 import me.ender.minimap.Minesweeper;
 
-public class MapView extends PView implements DTarget, Console.Directory, Widget.CursorQuery.Handler {
+public class MapView extends PView implements DTarget, Console.Directory {
     public static boolean clickdb = false;
     public long plgob = -1;
     public Coord2d cc;
@@ -73,8 +73,6 @@ public class MapView extends PView implements DTarget, Console.Directory, Widget
     String stip = null;
     RichText otip = null;
     public boolean fullTip = false;
-
-    private boolean showgrid;
 
     public interface Delayed {
 	public void run(GOut g);
@@ -2260,19 +2258,12 @@ public class MapView extends PView implements DTarget, Console.Directory, Widget
 		    if(clickb == 3) {
 			Reactor.GOB_INTERACT.onNext(gob);
 		    }
-		    if(ui.gui.mapfile.domark) {
-			ui.gui.mapfile.addMarker(gob);
-			return;
-		    }
 		    if(clickb == 3) {FlowerMenu.lastGob(gob);}
 		    if(ui.modflags(UI.MOD_CTRL_ALT) && clickb == 1) {
 			ChatCommands.sendGobHighlight(ui, gob.id);
 			return;
 		    }
 		}
-	    } else if(ui.gui.mapfile.domark) {
-		ui.gui.mapfile.addMarker(mc.floor(tilesz));
-		return;
 	    } else if(ui.modflags(UI.MOD_CTRL_ALT) && clickb == 1) {
 		Coord gc = mc.floor(tilesz).div(MCache.cmaps);
 		MCache.Grid grid = MapView.this.ui.sess.glob.map.getgrid(gc);
@@ -2340,12 +2331,6 @@ public class MapView extends PView implements DTarget, Console.Directory, Widget
 	parent.setfocus(this);
 	Loader.Future<Plob> placing_l = this.placing;
 	if(CustomCursors.processDown(this, ev)){return true;}
-	if(ev.b == 3) {
-	    if(ui.gui.mapfile.domark) {
-		ui.gui.mapfile.domark = false;
-		return true;
-	    }
-	}
 	if(ev.b == 2) {
 	    if(camdrag == null && camera.click(ev.c)) {
 		camdrag = ui.grabmouse(this);
@@ -2765,15 +2750,6 @@ public class MapView extends PView implements DTarget, Console.Directory, Widget
 	    otip = null;
 	}
 	stip = tip;
-    }
-    
-    @Override
-    public boolean getcurs(CursorQuery ev) {
-	if(ui.gui.mapfile != null && ui.gui.mapfile.domark) {
-	    ev.set(MapWnd.markcurs);
-	    return true;
-	}
-	return false;
     }
     
     public CompletableFuture<Coord2d> hit(Coord c) {
