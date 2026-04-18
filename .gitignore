@@ -19,3 +19,5 @@ out
 changelog.txt
 .tools
 .idea
+/.worktrees
+changelog.txt
