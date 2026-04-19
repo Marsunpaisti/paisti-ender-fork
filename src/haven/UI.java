@@ -28,6 +28,7 @@ package haven;
 
 import haven.rx.Reactor;
 import me.ender.WindowDetector;
+import me.ender.plugin.PluginManager;
 
 import java.awt.*;
 import java.awt.event.InputEvent;
@@ -511,9 +512,11 @@ public class UI {
 	}
 
 	public void run() {
+	    Widget wdg;
+	    Widget pwdg;
 	    synchronized(UI.this) {
-		Widget wdg = getwidget(id);
-		Widget pwdg = getwidget(parent);
+		wdg = getwidget(id);
+		pwdg = getwidget(parent);
 		if(wdg == null)
 		    throw(new UIException(String.format("Null child widget %d added to %d (%s)", id, parent, pwdg), null, pargs));
 		if(pwdg == null)
@@ -521,6 +524,7 @@ public class UI {
 		pwdg.addchild(wdg, pargs);
 		WindowDetector.process(wdg, pwdg);
 	    }
+	    PluginManager.get().dispatchWidgetAdded(UI.this, wdg, pwdg);
 	}
 
 	public String toString() {

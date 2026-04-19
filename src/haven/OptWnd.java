@@ -33,6 +33,7 @@ import haven.render.*;
 import me.ender.CFGColorBtn;
 import me.ender.GobInfoOpts;
 import me.ender.CustomOptPanels;
+import me.ender.plugin.PluginManager;
 import me.ender.ui.CFGBox;
 import me.ender.ui.CFGSlider;
 import me.ender.ui.DrinkMeter;
@@ -45,12 +46,13 @@ import static haven.Text.*;
 
 public class OptWnd extends WindowX {
     public static final Coord PANEL_POS = new Coord(220, 30);
-    private final Panel display, general, camera, shortcuts, mapping, uipanel, combat;
+    private final Panel display, general, camera, shortcuts, mapping, uipanel, combat, plugins;
     private final Panel color;
     public final Panel main;
     public static final Text.Foundry LBL_FNT = new Text.Foundry(sans, 14);
     public Panel current;
     private WidgetList<KeyBinder.ShortcutWidget> shortcutList;
+    private boolean pluginOptionsInitialized;
     
     public void chpanel(Panel p) {
 	if(current != null)
@@ -794,6 +796,7 @@ public class OptWnd extends WindowX {
 	shortcuts = add(new Panel());
 	mapping = add(new Panel());
 	color = add(new Panel());
+	plugins = add(new Panel());
 
 	int row = 0, colum = 0, mrow = 1;
     
@@ -814,6 +817,7 @@ public class OptWnd extends WindowX {
 	addPanelButton("Colors", 'o', color, colum, row++);
 	addPanelButton("Combat", 'b', combat, colum, row++);
 	addPanelButton("Map upload", 'm', mapping, colum, row++);
+	addPanelButton("Plugins", 'p', plugins, colum, row++);
 
 	int y = 0;
 	mrow = Math.max(mrow, row);
@@ -856,12 +860,30 @@ public class OptWnd extends WindowX {
     @Override
     protected void attach(UI ui) {
 	super.attach(ui);
+	initPluginOptions();
 	initShortcutsPanel();
     }
     
     private void addPanelButton(String name, char key, Panel panel, int x, int y) {
 	main.add(new PButton(UI.scale(200), name, key, panel), UI.scale(PANEL_POS.mul(x, y)));
     }
+
+    private void finishPanel(Panel panel) {
+	panel.add(new PButton(UI.scale(200), "Back", 27, main), 0, panel.contentsz().y + UI.scale(35));
+	panel.pack();
+    }
+
+    private void initPluginOptions() {
+	if(pluginOptionsInitialized)
+	    return;
+	PluginManager.get().populateOptions(this, plugins);
+	finishPanel(plugins);
+	pluginOptionsInitialized = true;
+	if(current == plugins)
+	    cresize(plugins);
+	else
+	    main.pack();
+	}
     
     private void addPanelButton(String name, char key, Action action, int x, int y) {
 	main.add(new AButton(UI.scale(200), name, key, action), UI.scale(PANEL_POS.mul(x, y)));

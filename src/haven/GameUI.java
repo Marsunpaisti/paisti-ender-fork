@@ -35,6 +35,7 @@ import me.ender.ClientUtils;
 import me.ender.QuestHelper;
 import me.ender.StatMeterWdg;
 import me.ender.minimap.*;
+import me.ender.plugin.PluginManager;
 import me.ender.timer.Timer;
 
 import java.util.*;
@@ -371,14 +372,18 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
 	Config.initAutomapper(ui);
 	Timer.start(this);
 	super.attach(ui);
+	PluginManager.get().dispatchGameUiReady(this);
     }
 
     @Override
     public void destroy() {
-	closeWindows();
-	untrackAllMarkers();
-	super.destroy();
-	ui.clearGUI(this);
+	try {
+	    closeWindows();
+	    untrackAllMarkers();
+	    super.destroy();
+	} finally {
+	    ui.clearGUI(this);
+	}
     }
     
     private static void closeWindow(Window wnd) { if(wnd != null) {wnd.close();} }

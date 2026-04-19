@@ -1,0 +1,13 @@
+#ABUTTON LAYER FOR RES qwe//\res\paginae\act\plugins.res
+#String pr
+paginae/act/add
+#uint16 pver
+2
+#String name
+Plugins
+#String preq
+
+#uint16 hk
+0
+#uint16 ad length
+0

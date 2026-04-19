@@ -1,0 +1,13 @@
+#ABUTTON LAYER FOR RES qwe//\res\paginae\add\plugins\demo_toggle.res
+#String pr
+paginae/act/plugins
+#uint16 pver
+2
+#String name
+Toggle Demo Plugin
+#String preq
+
+#uint16 hk
+0
+#uint16 ad length
+0

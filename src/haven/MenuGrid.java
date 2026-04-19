@@ -34,6 +34,8 @@ import me.ender.CustomPagina;
 import me.ender.CustomPaginaAction;
 import me.ender.GobInfoOpts;
 import me.ender.GobInfoOpts.InfoPart;
+import me.ender.plugin.PluginAction;
+import me.ender.plugin.PluginManager;
 import me.ender.minimap.Minesweeper;
 
 import javax.swing.*;
@@ -494,6 +496,7 @@ public class MenuGrid extends Widget implements KeyBinding.Bindable {
     public MenuGrid() {
 	super(bgsz.mul(gsz).add(1, 1));
 	initCustomPaginae();
+	initPluginPaginae();
     }
 
     private void updlayout() {
@@ -917,6 +920,19 @@ public class MenuGrid extends Widget implements KeyBinding.Bindable {
 	makeLocal("paginae/add/equip/sword-n-board", Action.EQUIP_SWORD_N_BOARD);
 	makeLocal("paginae/add/equip/bow", Action.EQUIP_BOW);
 	makeLocal("paginae/add/equip/spear", Action.EQUIP_SPEAR);
+    }
+
+    private void initPluginPaginae() {
+	PluginManager manager = PluginManager.get();
+	for(PluginAction action : manager.actions()) {
+	    try {
+		makeLocal(action.resourcePath(), (ctx, iact) -> manager.perform(action, ctx, iact),
+		    action.hasToggleState() ? () -> manager.toggleState(action).orElse(false) : null);
+	    } catch(RuntimeException e) {
+		System.err.println("[plugin] failed to load action resource: " + action.resourcePath());
+		e.printStackTrace(System.err);
+	    }
+	}
     }
     
     private void makeLocal(String path, CustomPaginaAction action, Supplier<Boolean> toggleState) {
