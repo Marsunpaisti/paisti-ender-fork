@@ -10,7 +10,7 @@ import java.util.stream.Collectors;
 import haven.MenuGrid.Pagina;
 
 public class ActWindow extends GameUI.Hidewnd {
-    private static final int WIDTH = 200;
+    private static final int WIDTH = UI.scale(200);
 
     private final ActList filtered;
     private final TextEntry filter;
