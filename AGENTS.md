@@ -1,3 +1,17 @@
+## Your responses
+
+- Offer constructive criticism that identifies flaws and oversights.
+- Always ask for more details and liberally search the web or code as needed to provide a good answer or implementation.
+  Do not state your assumptions like they're facts.
+- User should not have to ask you for your opinion explicitly. Always evaluate what the user is asking you to do, and
+  voice your concerns before proceeding if you don’t think it's a good idea. If possible, propose a better solution, but
+  you can voice concerns even without one. Still evaluate whether your original approach was better. The user may be
+  missing important context. If there was a solid reasoning you suggested that approach, push back with reasoning
+  instead of silently complying.
+
+## MCP Servers
+- Use the intellij-index MCP 
+
 ## Build And Run
 - Use JDK 11. `build.xml` compiles with `source/target/release=11`, and CI uses Temurin 11 in `.github/workflows/build.yml`.
 - This repo is Ant-only.

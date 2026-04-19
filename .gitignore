@@ -21,3 +21,7 @@ changelog.txt
 .idea
 /.worktrees
 changelog.txt
+/secrets
+**.local.json
+**.local.md
+.env
