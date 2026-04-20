@@ -14,6 +14,7 @@ public class PluginContext {
     private final List<GameUiReadyHook> gameUiReadyHooks = new ArrayList<>();
     private final List<WindowHook> windowHooks = new ArrayList<>();
     private final List<WidgetHook> widgetHooks = new ArrayList<>();
+    private final List<OutgoingWidgetMessageHook> outgoingWidgetMessageHooks = new ArrayList<>();
     private final List<PluginAction> actions = new ArrayList<>();
     private final List<PluginOptionSection> optionSections = new ArrayList<>();
     private boolean frozen;
@@ -43,6 +44,11 @@ public class PluginContext {
         widgetHooks.add(require(hook, "widget hook"));
     }
 
+    public void onOutgoingWidgetMessage(OutgoingWidgetMessageHook hook) {
+        ensureMutable();
+        outgoingWidgetMessageHooks.add(require(hook, "outgoing widget message hook"));
+    }
+
     public void addAction(PluginAction action) {
         ensureMutable();
         actions.add(require(action, "plugin action"));
@@ -61,6 +67,7 @@ public class PluginContext {
             List.copyOf(gameUiReadyHooks),
             List.copyOf(windowHooks),
             List.copyOf(widgetHooks),
+            List.copyOf(outgoingWidgetMessageHooks),
             List.copyOf(actions),
             List.copyOf(optionSections)
         );
@@ -85,6 +92,7 @@ public class PluginContext {
         final List<GameUiReadyHook> gameUiReadyHooks;
         final List<WindowHook> windowHooks;
         final List<WidgetHook> widgetHooks;
+        final List<OutgoingWidgetMessageHook> outgoingWidgetMessageHooks;
         final List<PluginAction> actions;
         final List<PluginOptionSection> optionSections;
 
@@ -93,6 +101,7 @@ public class PluginContext {
                          List<GameUiReadyHook> gameUiReadyHooks,
                          List<WindowHook> windowHooks,
                          List<WidgetHook> widgetHooks,
+                         List<OutgoingWidgetMessageHook> outgoingWidgetMessageHooks,
                          List<PluginAction> actions,
                          List<PluginOptionSection> optionSections) {
             this.clientStartHooks = Collections.unmodifiableList(clientStartHooks);
@@ -100,6 +109,7 @@ public class PluginContext {
             this.gameUiReadyHooks = Collections.unmodifiableList(gameUiReadyHooks);
             this.windowHooks = Collections.unmodifiableList(windowHooks);
             this.widgetHooks = Collections.unmodifiableList(widgetHooks);
+            this.outgoingWidgetMessageHooks = Collections.unmodifiableList(outgoingWidgetMessageHooks);
             this.actions = Collections.unmodifiableList(actions);
             this.optionSections = Collections.unmodifiableList(optionSections);
         }
@@ -128,5 +138,10 @@ public class PluginContext {
     @FunctionalInterface
     public interface WidgetHook {
         void accept(UI ui, Widget child, Widget parent);
+    }
+
+    @FunctionalInterface
+    public interface OutgoingWidgetMessageHook {
+        void accept(UI ui, Widget sender, int widgetId, String msg, Object[] args);
     }
 }

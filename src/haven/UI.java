@@ -716,6 +716,12 @@ public class UI {
 	    new Warning("wdgmsg sender (%s) is not in rwidgets, message is %s", sender.getClass().getName(), msg).issue();
 	    return;
 	}
+	try {
+	    PluginManager.get().dispatchOutgoingWidgetMessage(this, sender, id, msg, args);
+	} catch(RuntimeException e) {
+	    System.err.println("[plugin-runtime] outgoing widget message dispatch failed: " + e);
+	    e.printStackTrace(System.err);
+	}
 	if(rcvr != null)
 	    rcvr.rcvmsg(id, msg, args);
     }

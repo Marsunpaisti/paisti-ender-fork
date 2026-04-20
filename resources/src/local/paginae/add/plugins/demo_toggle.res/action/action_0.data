@@ -4,7 +4,7 @@ paginae/act/plugins
 #uint16 pver
 2
 #String name
-Toggle Demo Plugin
+Toggle Outgoing Wdgmsg Logger
 #String preq
 
 #uint16 hk

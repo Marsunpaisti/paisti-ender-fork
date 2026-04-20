@@ -93,6 +93,14 @@ public class PluginManager {
         }
     }
 
+    public void dispatchOutgoingWidgetMessage(UI ui, Widget sender, int widgetId, String msg, Object[] args) {
+        State snapshot = state;
+        Object[] safeArgs = copyOutgoingArgs(args);
+        for (Entry entry : snapshot.entries) {
+            dispatchOutgoingWidgetMessage(entry, ui, sender, widgetId, msg, safeArgs);
+        }
+    }
+
     public boolean perform(PluginAction action, OwnerContext ctx, MenuGrid.Interaction interaction) {
         return performResult(action, ctx, interaction) == PerformResult.PERFORMED_TRUE;
     }
@@ -350,9 +358,75 @@ public class PluginManager {
         }
     }
 
+    private void dispatchOutgoingWidgetMessage(Entry entry, UI ui, Widget sender, int widgetId, String msg, Object[] args) {
+        if (entry.quarantined) {
+            return;
+        }
+        for (PluginContext.OutgoingWidgetMessageHook hook : entry.snapshot.outgoingWidgetMessageHooks) {
+            if (entry.quarantined) {
+                break;
+            }
+            try {
+                hook.accept(ui, sender, widgetId, msg, copyOutgoingArgs(args));
+            } catch (Throwable error) {
+                rethrowFatal(error);
+                quarantine(entry, "outgoing widget message hook failed", error);
+            }
+        }
+    }
+
+    private static Object[] copyOutgoingArgs(Object[] args) {
+        return (args == null) ? new Object[0] : (Object[]) copyOutgoingValue(args);
+    }
+
+    private static Object copyOutgoingValue(Object value) {
+        if (value == null) {
+            return null;
+        }
+        Class<?> type = value.getClass();
+        if (!type.isArray()) {
+            return value;
+        }
+        if (value instanceof Object[]) {
+            Object[] source = (Object[]) value;
+            Object[] copy = new Object[source.length];
+            for (int i = 0; i < source.length; i++) {
+                copy[i] = copyOutgoingValue(source[i]);
+            }
+            return copy;
+        }
+        if (value instanceof byte[]) {
+            return ((byte[]) value).clone();
+        }
+        if (value instanceof short[]) {
+            return ((short[]) value).clone();
+        }
+        if (value instanceof int[]) {
+            return ((int[]) value).clone();
+        }
+        if (value instanceof long[]) {
+            return ((long[]) value).clone();
+        }
+        if (value instanceof float[]) {
+            return ((float[]) value).clone();
+        }
+        if (value instanceof double[]) {
+            return ((double[]) value).clone();
+        }
+        if (value instanceof char[]) {
+            return ((char[]) value).clone();
+        }
+        if (value instanceof boolean[]) {
+            return ((boolean[]) value).clone();
+        }
+        if (value instanceof Object) {
+            return ((Object[]) value).clone();
+        }
+        return value;
+    }
+
     private void quarantine(Entry entry, String message, Throwable error) {
-        if (!entry.quarantined) {
-            entry.quarantined = true;
+        if (entry.tryQuarantine()) {
             log(entry.plugin.id(), message, error);
         }
     }
@@ -399,6 +473,14 @@ public class PluginManager {
         private Entry(ClientPlugin plugin, PluginContext.Snapshot snapshot) {
             this.plugin = plugin;
             this.snapshot = snapshot;
+        }
+
+        private synchronized boolean tryQuarantine() {
+            if (quarantined) {
+                return false;
+            }
+            quarantined = true;
+            return true;
         }
     }
 
