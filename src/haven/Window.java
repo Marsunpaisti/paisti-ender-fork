@@ -28,11 +28,12 @@ package haven;
 
 import haven.rx.Reactor;
 import me.ender.WindowDetector;
-import me.ender.plugin.PluginManager;
-import me.ender.plugin.PluginWindowEvent;
 
 import java.awt.*;
 import haven.render.*;
+import paisti.plugin.PluginManager;
+import paisti.plugin.PluginWindowEvent;
+
 import java.util.function.*;
 import java.awt.Color;
 import java.awt.image.BufferedImage;

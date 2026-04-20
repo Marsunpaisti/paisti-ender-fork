@@ -1,10 +1,10 @@
 package haven.test;
 
 import haven.Window;
-import me.ender.plugin.BuiltinPlugins;
-import me.ender.plugin.PluginManager;
-import me.ender.plugin.PluginWindowEvent;
-import me.ender.plugin.plugins.OutgoingWdgmsgPlugin;
+import paisti.plugin.BuiltinPlugins;
+import paisti.plugin.PluginManager;
+import paisti.plugin.PluginWindowEvent;
+import paisti.plugin.plugins.OutgoingWdgmsgPlugin;
 
 import java.io.IOException;
 import java.nio.file.Files;

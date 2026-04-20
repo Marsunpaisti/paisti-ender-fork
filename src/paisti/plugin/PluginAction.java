@@ -1,4 +1,4 @@
-package me.ender.plugin;
+package paisti.plugin;
 
 import haven.MenuGrid;
 import haven.OwnerContext;

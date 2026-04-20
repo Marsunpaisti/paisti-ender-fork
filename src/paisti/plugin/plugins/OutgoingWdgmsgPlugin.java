@@ -1,4 +1,4 @@
-package me.ender.plugin.plugins;
+package paisti.plugin.plugins;
 
 import haven.CFG;
 import haven.Coord;
@@ -11,11 +11,11 @@ import haven.Window;
 import java.awt.Color;
 import java.lang.reflect.Array;
 
-import me.ender.plugin.ClientPlugin;
-import me.ender.plugin.PluginAction;
-import me.ender.plugin.PluginContext;
-import me.ender.plugin.PluginOptionSection;
 import me.ender.ui.CFGBox;
+import paisti.plugin.ClientPlugin;
+import paisti.plugin.PluginAction;
+import paisti.plugin.PluginContext;
+import paisti.plugin.PluginOptionSection;
 
 public class OutgoingWdgmsgPlugin implements ClientPlugin {
     private static final String PLUGIN_ID = "outgoing-wdgmsg";
@@ -128,13 +128,13 @@ public class OutgoingWdgmsgPlugin implements ClientPlugin {
     }
 
     private static String summarizeString(String value) {
-        StringBuilder out = new StringBuilder(Math.min(value.length(), MAX_STRING_PREVIEW) + 16);
+        StringBuilder out = new StringBuilder(Math.min(value.length(), MAX_STRING_PREVIEW) + 5);
         out.append('"');
         int count = 0;
         for (int i = 0; i < value.length(); i++) {
             String escaped = escapeChar(value.charAt(i));
             if (count + escaped.length() > MAX_STRING_PREVIEW) {
-                out.append("...(truncated)");
+                out.append("...");
                 out.append('"');
                 return out.toString();
             }

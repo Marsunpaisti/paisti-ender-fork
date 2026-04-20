@@ -5,12 +5,8 @@ import haven.MenuGrid;
 import haven.OptWnd;
 import haven.OwnerContext;
 import haven.Widget;
-import me.ender.plugin.ClientPlugin;
-import me.ender.plugin.PluginAction;
-import me.ender.plugin.PluginContext;
-import me.ender.plugin.PluginManager;
-import me.ender.plugin.PluginOptionSection;
-import me.ender.plugin.PluginWindowEvent;
+import paisti.plugin.*;
+
 
 import java.util.ArrayList;
 import java.util.List;

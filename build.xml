@@ -98,6 +98,9 @@
 	<pathelement path="lib/jglob.jar" />
 	<pathelement path="lib/gson-2.8.6.jar" />
         <pathelement path="lib/rxjava-1.1.5.jar" />
+	<pathelement path="lib/guava-33.2.1-jre.jar" />
+	<pathelement path="lib/failureaccess-1.0.2.jar" />
+	<pathelement path="lib/jsr305-3.0.2.jar" />
       </classpath>
       <compilerarg if:set="explicit-annotations" value="-proc:full" />
       <compilerarg value="-Xlint:unchecked" />
@@ -137,6 +140,15 @@
       <patternset excludes="META-INF/**" />
     </unjar>
     <unjar src="lib/rxjava-1.1.5.jar" dest="build/classes-lib">
+      <patternset excludes="META-INF/**" />
+    </unjar>
+    <unjar src="lib/guava-33.2.1-jre.jar" dest="build/classes-lib">
+      <patternset excludes="META-INF/**" />
+    </unjar>
+    <unjar src="lib/failureaccess-1.0.2.jar" dest="build/classes-lib">
+      <patternset excludes="META-INF/**" />
+    </unjar>
+    <unjar src="lib/jsr305-3.0.2.jar" dest="build/classes-lib">
       <patternset excludes="META-INF/**" />
     </unjar>
   </target>

@@ -35,7 +35,6 @@ import me.ender.ClientUtils;
 import me.ender.QuestHelper;
 import me.ender.StatMeterWdg;
 import me.ender.minimap.*;
-import me.ender.plugin.PluginManager;
 import me.ender.timer.Timer;
 
 import java.util.*;
@@ -48,6 +47,7 @@ import java.util.List;
 import static haven.ItemFilter.*;
 import haven.render.Location;
 import me.ender.alchemy.AlchemyWnd;
+import paisti.plugin.PluginManager;
 
 import static haven.Inventory.invsq;
 

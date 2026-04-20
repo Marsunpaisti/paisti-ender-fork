@@ -1,4 +1,4 @@
-package me.ender.plugin;
+package paisti.plugin;
 
 public interface ClientPlugin {
     String id();

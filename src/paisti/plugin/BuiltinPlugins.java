@@ -1,6 +1,7 @@
-package me.ender.plugin;
+package paisti.plugin;
 
-import me.ender.plugin.plugins.OutgoingWdgmsgPlugin;
+
+import paisti.plugin.plugins.OutgoingWdgmsgPlugin;
 
 import java.util.List;
 

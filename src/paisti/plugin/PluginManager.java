@@ -1,4 +1,4 @@
-package me.ender.plugin;
+package paisti.plugin;
 
 import haven.GameUI;
 import haven.MenuGrid;
@@ -7,6 +7,8 @@ import haven.OwnerContext;
 import haven.UI;
 import haven.Widget;
 import haven.Window;
+import paisti.hooks.EventBus;
+import paisti.hooks.events.BeforeOutgoingWidgetMessage;
 
 import java.util.ArrayList;
 import java.util.Collections;

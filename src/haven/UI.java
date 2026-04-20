@@ -28,7 +28,6 @@ package haven;
 
 import haven.rx.Reactor;
 import me.ender.WindowDetector;
-import me.ender.plugin.PluginManager;
 
 import java.awt.*;
 import java.awt.event.InputEvent;
@@ -52,6 +51,9 @@ import java.util.List;
 import static haven.Utils.el;
 import haven.render.Environment;
 import haven.render.Render;
+import paisti.hooks.EventBus;
+import paisti.hooks.events.BeforeOutgoingWidgetMessage;
+import paisti.plugin.PluginManager;
 
 public class UI {
     public static int MOD_SHIFT = KeyMatch.S, MOD_CTRL = KeyMatch.C, MOD_META = KeyMatch.M, MOD_SUPER = KeyMatch.SUPER;
@@ -722,6 +724,7 @@ public class UI {
 	    System.err.println("[plugin-runtime] outgoing widget message dispatch failed: " + e);
 	    e.printStackTrace(System.err);
 	}
+	EventBus.get().post(new BeforeOutgoingWidgetMessage(this, sender, id, msg, args));
 	if(rcvr != null)
 	    rcvr.rcvmsg(id, msg, args);
     }

@@ -33,11 +33,11 @@ import haven.render.*;
 import me.ender.CFGColorBtn;
 import me.ender.GobInfoOpts;
 import me.ender.CustomOptPanels;
-import me.ender.plugin.PluginManager;
 import me.ender.ui.CFGBox;
 import me.ender.ui.CFGSlider;
 import me.ender.ui.DrinkMeter;
 import me.ender.ui.TabStrip;
+import paisti.plugin.PluginManager;
 
 import java.awt.event.KeyEvent;
 import java.util.Set;

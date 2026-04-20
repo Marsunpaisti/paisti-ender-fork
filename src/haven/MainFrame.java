@@ -26,8 +26,9 @@
 
 package haven;
 
-import me.ender.plugin.BuiltinPlugins;
-import me.ender.plugin.PluginManager;
+
+import paisti.plugin.BuiltinPlugins;
+import paisti.plugin.PluginManager;
 
 import java.awt.*;
 import java.awt.event.*;

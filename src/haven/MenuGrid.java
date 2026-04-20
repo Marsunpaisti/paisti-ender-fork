@@ -34,9 +34,9 @@ import me.ender.CustomPagina;
 import me.ender.CustomPaginaAction;
 import me.ender.GobInfoOpts;
 import me.ender.GobInfoOpts.InfoPart;
-import me.ender.plugin.PluginAction;
-import me.ender.plugin.PluginManager;
 import me.ender.minimap.Minesweeper;
+import paisti.plugin.PluginAction;
+import paisti.plugin.PluginManager;
 
 import javax.swing.*;
 import java.awt.*;
