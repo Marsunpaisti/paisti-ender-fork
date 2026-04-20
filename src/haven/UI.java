@@ -29,7 +29,6 @@ package haven;
 import haven.rx.Reactor;
 import me.ender.WindowDetector;
 
-import java.awt.*;
 import java.awt.event.InputEvent;
 import java.util.*;
 import java.util.function.*;
@@ -42,18 +41,15 @@ import java.awt.DisplayMode;
 import java.awt.Color;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
-import java.awt.event.InputEvent;
-import java.awt.image.BufferedImage;
-import java.util.*;
 import java.io.Serializable;
 import java.util.List;
 
-import static haven.Utils.el;
 import haven.render.Environment;
 import haven.render.Render;
 import paisti.hooks.EventBus;
 import paisti.hooks.events.BeforeOutgoingWidgetMessage;
 import paisti.plugin.PluginManager;
+import paisti.pluginv2.PluginService;
 
 public class UI {
     public static int MOD_SHIFT = KeyMatch.S, MOD_CTRL = KeyMatch.C, MOD_META = KeyMatch.M, MOD_SUPER = KeyMatch.SUPER;
@@ -82,6 +78,7 @@ public class UI {
     public Console cons = new WidgetConsole();
     private Collection<AfterDraw> afterdraws = new LinkedList<AfterDraw>();
     private final Context uictx;
+    private final PaistiServices paistiServices;
     public GSettings gprefs = GSettings.load(true);
     private boolean gprefsdirty = false;
     public final ActAudio.Root audio = new ActAudio.Root();
@@ -96,10 +93,7 @@ public class UI {
 
 	@Override
 	public <T> T context(Class<T> cl) {
-	    if(cl == Session.class || cl == Resource.Resolver.class) {
-		return (T) sess;
-	    }
-	    return null;
+	    return OwnerContext.uictx.context(cl, UI.this, false);
 	}
     };
     private final Object guiLock = new Object();
@@ -240,6 +234,7 @@ public class UI {
 
     public UI(Context uictx, Coord sz, Runner fun) {
 	this.uictx = uictx;
+	this.paistiServices = new PaistiServices(this);
 	root = new RootWidget(this, sz);
 	widgets.put(0, root);
 	rwidgets.put(root, 0);
@@ -252,6 +247,22 @@ public class UI {
 		throw(new NullPointerException());
 	}
     }
+
+	public void startServices() {
+	    paistiServices.start();
+	}
+
+	public PaistiServices services() {
+	    return paistiServices;
+	}
+
+	public EventBus eventBus() {
+	    return paistiServices.eventBus();
+	}
+
+	public PluginService pluginService() {
+	    return paistiServices.pluginService();
+	}
 
     public static class Command implements Serializable {
 	private static final java.util.concurrent.atomic.AtomicInteger nextid = new java.util.concurrent.atomic.AtomicInteger(0);
@@ -724,7 +735,7 @@ public class UI {
 	    System.err.println("[plugin-runtime] outgoing widget message dispatch failed: " + e);
 	    e.printStackTrace(System.err);
 	}
-	EventBus.get().post(new BeforeOutgoingWidgetMessage(this, sender, id, msg, args));
+	eventBus().post(new BeforeOutgoingWidgetMessage(this, sender, id, msg, args));
 	if(rcvr != null)
 	    rcvr.rcvmsg(id, msg, args);
     }
@@ -1036,6 +1047,7 @@ public class UI {
     }
 
     public void destroy() {
+	paistiServices.stop();
 	root.destroy();
 	audio.clear();
     }

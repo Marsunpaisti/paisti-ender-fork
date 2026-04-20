@@ -2,7 +2,6 @@ package paisti.hooks;
 
 import com.google.common.collect.ImmutableMultimap;
 import com.google.common.collect.Iterables;
-import paisti.plugin.PluginManager;
 
 import javax.annotation.Nonnull;
 import javax.annotation.concurrent.ThreadSafe;
@@ -12,13 +11,8 @@ import java.util.function.Consumer;
 
 @ThreadSafe
 public class EventBus {
-    private static final EventBus INSTANCE = new EventBus();
-    private ImmutableMultimap<Class<?>, Subscriber> subscribers = ImmutableMultimap.of();
+    private volatile ImmutableMultimap<Class<?>, Subscriber> subscribers = ImmutableMultimap.of();
     private final Consumer<Throwable> exceptionHandler;
-
-    public static EventBus get(){
-	return INSTANCE;
-    }
 
     public EventBus(@Nonnull Consumer<Throwable> exceptionHandler)
     {

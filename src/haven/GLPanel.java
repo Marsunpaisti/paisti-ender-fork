@@ -466,6 +466,7 @@ public interface GLPanel extends UIPanel, UI.Context {
 	    if(p instanceof Console.Directory)
 		newui.cons.add((Console.Directory)p);
 	    newui.cons.add(this);
+	    newui.startServices();
 	    synchronized(uilock) {
 		prevui = this.ui;
 		ui = newui;
