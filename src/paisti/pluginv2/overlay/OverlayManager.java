@@ -1,7 +1,12 @@
 package paisti.pluginv2.overlay;
 
 import haven.GOut;
+import haven.GameUI;
+import haven.MapView;
 import haven.PaistiServices;
+import haven.render.Pipe;
+import haven.render.Render;
+import haven.render.RenderTree;
 import paisti.pluginv2.PaistiPlugin;
 
 import java.util.ArrayList;
@@ -16,6 +21,10 @@ public class OverlayManager {
     private final PaistiServices services;
     private final CopyOnWriteArrayList<RegisteredOverlay> overlays = new CopyOnWriteArrayList<>();
     private final AtomicLong nextOrder = new AtomicLong();
+    private final MapOverlayBridge mapBridge = new MapOverlayBridge(this);
+
+    private volatile MapView attachedMap;
+    private volatile RenderTree.Slot mapSlot;
 
     public OverlayManager(PaistiServices services) {
         this.services = services;
@@ -76,7 +85,60 @@ public class OverlayManager {
         return result;
     }
 
+    public void renderMapWorldOverlays(Pipe state, Render out) {
+        MapView map = currentMap();
+        GameUI gui = currentGui();
+        MapWorldOverlayContext ctx = new MapWorldOverlayContext(services.ui(), gui, map, state, out);
+        for(RegisteredOverlay registered : sorted()) {
+            if(!(registered.overlay instanceof MapOverlay)) {
+                continue;
+            }
+            if(registered.disabled || !registered.overlay.enabled()) {
+                continue;
+            }
+            try {
+                ((MapOverlay) registered.overlay).renderWorld(ctx);
+                registered.failures = 0;
+            } catch(Throwable t) {
+                handleFailure(registered, t);
+            }
+        }
+    }
+
+    public void renderMapScreenOverlays(GOut g, Pipe state) {
+        MapView map = currentMap();
+        GameUI gui = currentGui();
+        MapScreenOverlayContext ctx = new MapScreenOverlayContext(services.ui(), gui, map, g, state);
+        for(RegisteredOverlay registered : sorted()) {
+            if(!(registered.overlay instanceof MapOverlay)) {
+                continue;
+            }
+            if(registered.disabled || !registered.overlay.enabled()) {
+                continue;
+            }
+            try {
+                ((MapOverlay) registered.overlay).renderScreen(ctx);
+                registered.failures = 0;
+            } catch(Throwable t) {
+                handleFailure(registered, t);
+            }
+        }
+    }
+
+    public void syncMapOverlayAttachment() {
+        MapView map = currentMap();
+        if(map == attachedMap) {
+            return;
+        }
+        clearMapAttachment();
+        attachedMap = map;
+        if(attachedMap != null) {
+            mapSlot = attachedMap.drawadd(mapBridge);
+        }
+    }
+
     public void renderScreenOverlays(GOut g) {
+        syncMapOverlayAttachment();
         ScreenOverlayContext ctx = new ScreenOverlayContext(services.ui(), g);
         for(RegisteredOverlay registered : sorted()) {
             if(!(registered.overlay instanceof ScreenOverlay)) {
@@ -95,6 +157,7 @@ public class OverlayManager {
     }
 
     public void stop() {
+        clearMapAttachment();
         for(RegisteredOverlay registered : overlays) {
             unregister(registered);
         }
@@ -138,6 +201,30 @@ public class OverlayManager {
             }
         }
         disposeQuietly(removed);
+    }
+
+    private GameUI currentGui() {
+        return (services.ui() == null) ? null : services.ui().gui;
+    }
+
+    private MapView currentMap() {
+        GameUI gui = currentGui();
+        if((gui != null) && (gui.map != null)) {
+            return gui.map;
+        }
+        if((services.ui() == null) || (services.ui().root == null)) {
+            return null;
+        }
+        return services.ui().root.findchild(MapView.class);
+    }
+
+    private void clearMapAttachment() {
+        RenderTree.Slot slot = mapSlot;
+        mapSlot = null;
+        if(slot != null) {
+            slot.remove();
+        }
+        attachedMap = null;
     }
 
     static final class RegisteredOverlay {

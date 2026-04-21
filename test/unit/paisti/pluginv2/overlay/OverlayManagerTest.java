@@ -1,18 +1,33 @@
 package paisti.pluginv2.overlay;
 
 import haven.PaistiServices;
+import haven.PView;
+import haven.Coord;
+import haven.Coord2d;
+import haven.ActAudio;
+import haven.MapView;
+import haven.RootWidget;
+import haven.UI;
+import haven.render.Pipe;
+import haven.render.Render;
+import haven.render.GroupPipe;
+import haven.render.RenderTree;
+import haven.render.Rendered;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import paisti.pluginv2.PluginDescription;
 import paisti.pluginv2.PaistiPlugin;
+import sun.misc.Unsafe;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.InvocationTargetException;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -202,13 +217,105 @@ class OverlayManagerTest {
     void mapOverlaysExcludeDisabledByEnabledFlag() {
         OverlayManager manager = new OverlayManager(new PaistiServices());
         TestPlugin owner = new TestPlugin(new PaistiServices());
-        TrackingMapOverlay healthy = new TrackingMapOverlay(true);
-        TrackingMapOverlay disabled = new TrackingMapOverlay(false);
+        TrackingMapOverlay healthy = new TrackingMapOverlay("healthy", 0, null, true);
+        TrackingMapOverlay disabled = new TrackingMapOverlay("disabled", 0, null, false);
 
         manager.register(owner, disabled);
         manager.register(owner, healthy);
 
         assertEquals(List.of(healthy), manager.mapOverlays(), "expected map overlay list to exclude overlays whose enabled() is false");
+    }
+
+    @Test
+    @Tag("unit")
+    void mapOverlaysRenderInPriorityThenRegistrationOrder() {
+        OverlayManager manager = new OverlayManager(new PaistiServices());
+        TestPlugin owner = new TestPlugin(new PaistiServices());
+        List<String> trace = new ArrayList<>();
+
+        manager.register(owner, new TrackingMapOverlay("late", 10, trace, true));
+        manager.register(owner, new TrackingMapOverlay("early-a", 0, trace, true));
+        manager.register(owner, new TrackingMapOverlay("early-b", 0, trace, true));
+
+        manager.renderMapWorldOverlays((Pipe) null, (Render) null);
+        manager.renderMapScreenOverlays(null, null);
+
+        assertEquals(Arrays.asList(
+            "world:early-a",
+            "world:early-b",
+            "world:late",
+            "screen:early-a",
+            "screen:early-b",
+            "screen:late"
+        ), trace);
+    }
+
+    @Test
+    @Tag("unit")
+    void mapOverlayBridgeImplementsExpectedRenderInterfaces() throws Exception {
+        Class<?> type = Class.forName("paisti.pluginv2.overlay.MapOverlayBridge");
+
+        assertTrue(RenderTree.Node.class.isAssignableFrom(type), "expected map bridge to implement RenderTree.Node");
+        assertTrue(Rendered.class.isAssignableFrom(type), "expected map bridge to implement Rendered");
+        assertTrue(PView.Render2D.class.isAssignableFrom(type), "expected map bridge to implement PView.Render2D");
+    }
+
+    @Test
+    @Tag("unit")
+    void bindUiAttachesAlreadyPresentMapBridgeWithoutWaitingForDraw() throws Exception {
+        PaistiServices services = new PaistiServices();
+        OverlayManager manager = services.overlayManager();
+        UI ui = fakeUi(services);
+        TestMapView map = allocate(TestMapView.class);
+
+        setRootMap(ui, map);
+        services.bindUi(ui);
+
+        assertSame(map, attachedMap(manager), "expected bindUi(...) to attach an already-present map bridge immediately");
+        assertEquals(1, map.drawaddCalls, "expected current map to receive the bridge without waiting for a later draw");
+        assertNotNull(map.lastSlot, "expected map bridge attachment to create a slot");
+    }
+
+    @Test
+    @Tag("unit")
+    void bindUiReplacesMapBridgeAttachmentWithoutWaitingForDraw() throws Exception {
+        PaistiServices services = new PaistiServices();
+        OverlayManager manager = services.overlayManager();
+        UI firstUi = fakeUi(services);
+        UI secondUi = fakeUi(services);
+        TestMapView firstMap = allocate(TestMapView.class);
+        TestMapView secondMap = allocate(TestMapView.class);
+
+        setRootMap(firstUi, firstMap);
+        services.bindUi(firstUi);
+
+        TestRenderTreeSlot firstSlot = firstMap.lastSlot;
+        setRootMap(secondUi, secondMap);
+
+        services.bindUi(secondUi);
+
+        assertTrue(firstSlot.removed, "expected rebinding to a new UI to promptly remove the old map bridge slot");
+        assertSame(secondMap, attachedMap(manager), "expected rebinding to attach the bridge to the replacement UI map immediately");
+        assertEquals(1, secondMap.drawaddCalls, "expected replacement map to receive the bridge without waiting for a later draw");
+    }
+
+    @Test
+    @Tag("unit")
+    void clearUiDetachesMapBridgePromptly() throws Exception {
+        PaistiServices services = new PaistiServices();
+        OverlayManager manager = services.overlayManager();
+        UI ui = fakeUi(services);
+        TestMapView map = allocate(TestMapView.class);
+
+        setRootMap(ui, map);
+        services.bindUi(ui);
+
+        TestRenderTreeSlot slot = map.lastSlot;
+        services.clearUi(ui);
+
+        assertNull(attachedMap(manager), "expected clearUi(...) to detach the active map promptly");
+        assertNull(mapSlot(manager), "expected clearUi(...) to clear the manager's map slot promptly");
+        assertTrue(slot.removed, "expected clearUi(...) to remove the stale map bridge slot immediately");
     }
 
     private static class TrackingScreenOverlay implements ScreenOverlay {
@@ -273,15 +380,40 @@ class OverlayManagerTest {
     }
 
     private static final class TrackingMapOverlay implements MapOverlay {
+        private final String name;
+        private final int priority;
+        private final List<String> trace;
         private final boolean enabled;
 
-        private TrackingMapOverlay(boolean enabled) {
+        private TrackingMapOverlay(String name, int priority, List<String> trace, boolean enabled) {
+            this.name = name;
+            this.priority = priority;
+            this.trace = trace;
             this.enabled = enabled;
+        }
+
+        @Override
+        public int priority() {
+            return priority;
         }
 
         @Override
         public boolean enabled() {
             return enabled;
+        }
+
+        @Override
+        public void renderWorld(MapWorldOverlayContext ctx) {
+            if(trace != null) {
+                trace.add("world:" + name);
+            }
+        }
+
+        @Override
+        public void renderScreen(MapScreenOverlayContext ctx) {
+            if(trace != null) {
+                trace.add("screen:" + name);
+            }
         }
     }
 
@@ -314,6 +446,135 @@ class OverlayManagerTest {
                 throw (Error) cause;
             }
             throw new AssertionError("unexpected checked exception from renderScreenOverlays", cause);
+        }
+    }
+
+    private static UI fakeUi(PaistiServices services) throws Exception {
+        UI ui = allocate(UI.class);
+        setField(UI.class, ui, "paistiServices", services);
+        setField(UI.class, ui, "guiLock", new Object());
+        setField(UI.class, ui, "audio", new ActAudio.Root());
+        setField(UI.class, ui, "root", new TestRootWidget(ui));
+        return ui;
+    }
+
+    private static void setRootMap(UI ui, MapView map) {
+        ((TestRootWidget) ui.root).mapChild = map;
+    }
+
+    private static MapView attachedMap(OverlayManager manager) throws Exception {
+        return getField(OverlayManager.class, manager, "attachedMap", MapView.class);
+    }
+
+    private static RenderTree.Slot mapSlot(OverlayManager manager) throws Exception {
+        return getField(OverlayManager.class, manager, "mapSlot", RenderTree.Slot.class);
+    }
+
+    private static <T> T allocate(Class<T> cl) throws Exception {
+        Field field = Unsafe.class.getDeclaredField("theUnsafe");
+        field.setAccessible(true);
+        Unsafe unsafe = (Unsafe) field.get(null);
+        return cl.cast(unsafe.allocateInstance(cl));
+    }
+
+    private static void setField(Class<?> owner, Object target, String name, Object value) throws Exception {
+        Field field = owner.getDeclaredField(name);
+        field.setAccessible(true);
+        field.set(target, value);
+    }
+
+    private static <T> T getField(Class<?> owner, Object target, String name, Class<T> type) throws Exception {
+        Field field = owner.getDeclaredField(name);
+        field.setAccessible(true);
+        return type.cast(field.get(target));
+    }
+
+    private static final class TestMapView extends MapView {
+        private int drawaddCalls;
+        private RenderTree.Node lastNode;
+        private TestRenderTreeSlot lastSlot;
+
+        private TestMapView() {
+            super(Coord.z, null, (Coord2d) null, 0);
+        }
+
+        @Override
+        public RenderTree.Slot drawadd(RenderTree.Node extra) {
+            drawaddCalls++;
+            lastNode = extra;
+            lastSlot = new TestRenderTreeSlot(extra);
+            return lastSlot;
+        }
+    }
+
+    private static final class TestRootWidget extends RootWidget {
+        private MapView mapChild;
+
+        private TestRootWidget(UI ui) {
+            super(ui, Coord.z);
+        }
+
+        @Override
+        protected me.ender.gob.GobEffects createEffects(UI ui) {
+            return null;
+        }
+
+        @Override
+        public <T extends haven.Widget> T findchild(Class<T> cl) {
+            if((mapChild != null) && cl.isInstance(mapChild)) {
+                return cl.cast(mapChild);
+            }
+            return null;
+        }
+    }
+
+    private static final class TestRenderTreeSlot implements RenderTree.Slot {
+        private final RenderTree.Node node;
+        private boolean removed;
+
+        private TestRenderTreeSlot(RenderTree.Node node) {
+            this.node = node;
+        }
+
+        @Override
+        public GroupPipe state() {
+            return null;
+        }
+
+        @Override
+        public RenderTree.Node obj() {
+            return node;
+        }
+
+        @Override
+        public RenderTree.Slot add(RenderTree.Node n, Pipe.Op state) {
+            return null;
+        }
+
+        @Override
+        public void remove() {
+            removed = true;
+        }
+
+        @Override
+        public void clear() {
+        }
+
+        @Override
+        public void cstate(Pipe.Op state) {
+        }
+
+        @Override
+        public void ostate(Pipe.Op state) {
+        }
+
+        @Override
+        public RenderTree.Slot parent() {
+            return null;
+        }
+
+        @Override
+        public void update() {
         }
     }
 }

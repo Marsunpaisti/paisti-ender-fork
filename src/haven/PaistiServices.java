@@ -23,11 +23,14 @@ public class PaistiServices {
 
     public void bindUi(UI ui) {
 	this.ui = ui;
+	overlayManager.syncMapOverlayAttachment();
     }
 
     public void clearUi(UI ui) {
-	if(this.ui == ui)
+	if(this.ui == ui) {
 	    this.ui = null;
+	    overlayManager.syncMapOverlayAttachment();
+	}
     }
 
     public EventBus eventBus() {

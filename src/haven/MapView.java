@@ -696,7 +696,15 @@ public class MapView extends PView implements DTarget, Console.Directory {
 	updateSupportOverlay();
 	updateGridMat(null);
     }
-    
+
+	@Override
+	protected void attached() {
+	    super.attached();
+	    if((ui != null) && (ui.services() != null)) {
+		ui.services().overlayManager().syncMapOverlayAttachment();
+	    }
+	}
+     
     private void updatePlobDrawable(CFG<Boolean> cfg) {
 	if(placing != null && placing.done()) {
 	    placing.get().drawableUpdated();
