@@ -55,5 +55,6 @@ public class PaistiServices {
 	    return;
 	started = false;
 	pluginService.stopAll();
+	overlayManager.stop();
     }
 }

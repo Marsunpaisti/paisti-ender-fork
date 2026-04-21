@@ -461,6 +461,7 @@ public class UI {
 		ad.draw(g);
 	    afterdraws.clear();
 	}
+	paistiServices.overlayManager().renderScreenOverlays(g);
     }
 
     private Collection<Integer> or_deps = null, or_bars = null;
