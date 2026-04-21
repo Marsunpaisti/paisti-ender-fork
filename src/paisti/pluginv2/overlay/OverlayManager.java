@@ -3,8 +3,8 @@ package paisti.pluginv2.overlay;
 import haven.PaistiServices;
 import paisti.pluginv2.PaistiPlugin;
 
-import java.util.Collection;
 import java.util.Collections;
+import java.util.List;
 
 public class OverlayManager {
     private final PaistiServices services;
@@ -23,11 +23,11 @@ public class OverlayManager {
     public void unregisterAll(PaistiPlugin owner) {
     }
 
-    public Collection<ScreenOverlay> screenOverlays() {
+    public List<ScreenOverlay> screenOverlays() {
         return Collections.emptyList();
     }
 
-    public Collection<MapOverlay> mapOverlays() {
+    public List<MapOverlay> mapOverlays() {
         return Collections.emptyList();
     }
 }

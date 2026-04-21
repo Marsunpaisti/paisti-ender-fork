@@ -6,11 +6,31 @@ import org.junit.jupiter.api.Test;
 import paisti.pluginv2.PaistiPlugin;
 
 import java.lang.reflect.Method;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 
 class OverlayManagerTest {
+    private static final class TestPlugin extends PaistiPlugin {
+        private TestPlugin(PaistiServices services) {
+            super(services);
+        }
+
+        @Override
+        public void startUp() {
+        }
+
+        @Override
+        public void shutDown() {
+        }
+
+        private OverlayManager exposedOverlayManager() {
+            return overlayManager();
+        }
+    }
+
     @Test
     @Tag("unit")
     void overlayApiExists() throws Exception {
@@ -26,15 +46,33 @@ class OverlayManagerTest {
 
     @Test
     @Tag("unit")
-    void servicesExposeOverlayManager() throws Exception {
+    void servicesExposeStableSharedOverlayManager() throws Exception {
         Method method = PaistiServices.class.getMethod("overlayManager");
         assertEquals("paisti.pluginv2.overlay.OverlayManager", method.getReturnType().getName());
+
+        PaistiServices services = new PaistiServices();
+        OverlayManager manager = services.overlayManager();
+
+        assertNotNull(manager);
+        assertSame(manager, services.overlayManager());
     }
 
     @Test
     @Tag("unit")
-    void pluginBaseExposesOverlayManagerAccessor() throws Exception {
+    void pluginBaseDelegatesToServicesOverlayManager() throws Exception {
         Method method = PaistiPlugin.class.getDeclaredMethod("overlayManager");
         assertEquals("paisti.pluginv2.overlay.OverlayManager", method.getReturnType().getName());
+
+        PaistiServices services = new PaistiServices();
+        TestPlugin plugin = new TestPlugin(services);
+
+        assertSame(services.overlayManager(), plugin.exposedOverlayManager());
+    }
+
+    @Test
+    @Tag("unit")
+    void overlayManagerExposesOrderedOverlayLists() throws Exception {
+        assertSame(List.class, OverlayManager.class.getMethod("screenOverlays").getReturnType());
+        assertSame(List.class, OverlayManager.class.getMethod("mapOverlays").getReturnType());
     }
 }
