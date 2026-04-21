@@ -23,11 +23,19 @@ Out of scope:
 
 ## Current Behavior
 
-The new plugin system currently only manages plugin lifecycle.
+The new plugin system currently only manages plugin lifecycle, but the surrounding service lifetime has changed since this spec was first written.
 
 - `src/haven/PaistiServices.java`
 - `src/paisti/pluginv2/PluginService.java`
 - `src/paisti/pluginv2/PaistiPlugin.java`
+
+`PaistiServices` is now a shared service container that outlives individual `UI` instances and tracks the current UI through `bindUi(...)` and `clearUi(...)`.
+
+- `src/haven/PaistiServices.java`
+- `src/haven/GLPanel.java`
+- `test/unit/haven/PaistiServicesLifetimeTest.java`
+
+That matters for overlays because registrations should survive UI swaps and relog-style UI recreation, while map attachment and screen rendering should follow whichever `UI` is currently bound.
 
 The client already exposes two separate rendering lanes that overlays can build on:
 
@@ -72,6 +80,8 @@ Add `OverlayManager` to `PaistiServices` alongside `PluginService`.
 - `protected OverlayManager overlayManager()`
 
 This keeps overlay registration in the same service container already used by plugin code.
+
+Because `PaistiServices` is now shared across UI swaps, `OverlayManager` should use `services.ui()` as its live UI pointer and must not capture a `UI` permanently during construction.
 
 ### Ownership Model
 
@@ -259,15 +269,26 @@ This centralizes all render-tree lifecycle handling in one place.
 
 ## Lifecycle Rules
 
-### UI Lifetime
+### Shared Service Lifetime
 
-`OverlayManager` shares the lifetime of the current `UI` through `PaistiServices`.
+`OverlayManager` should share the lifetime of the shared `PaistiServices` instance, not the lifetime of one specific `UI`.
 
 That means:
 
 - plugins may register overlays before `GameUI` or `MapView` exists
-- overlays must start rendering automatically once the map becomes available
-- all overlays must be disposed when the current UI stops
+- overlays must start rendering automatically once the currently bound UI exposes a map
+- overlay registrations should survive UI swaps while shared services remain started
+- all overlays must be disposed when shared services stop
+
+### UI Binding
+
+The active `UI` should be discovered through `services.ui()`, which is maintained by `PaistiServices.bindUi(...)` and `PaistiServices.clearUi(...)`.
+
+Implications:
+
+- screen overlay rendering must tolerate `services.ui()` being `null`
+- map attachment must re-resolve the active `MapView` from the currently bound UI instead of assuming a single UI lifetime
+- UI destruction should not itself clear overlay registrations; only shared-service shutdown or explicit plugin unregister should do that
 
 ### MapView Attachment
 
@@ -279,7 +300,7 @@ When the active `MapView` instance changes:
 2. attach the manager bridge to the new map with `drawadd(...)`
 3. continue rendering registered overlays without requiring plugin re-registration
 
-This handles relog, session recreation, and widget replacement.
+This handles relog, session recreation, widget replacement, and the now-tested shared-service UI swap behavior.
 
 ### Plugin Shutdown
 
@@ -398,6 +419,12 @@ This is intentionally enough structure to support the desired API shape without 
 - new overlay manager and overlay interfaces under `src/paisti/pluginv2/` or a closely related package
 - one stable screen-overlay draw hook in `src/haven/UI.java`
 - map bridge integration using `src/haven/MapView.java`
+- `test/unit/haven/PaistiServicesLifetimeTest.java`
+- `test/unit/paisti/pluginv2/overlay/OverlayManagerTest.java`
+
+Possible support file if the tests benefit from extracted helpers:
+
+- `test/support/paisti/pluginv2/testing/*.java`
 
 Probable new files:
 
@@ -412,7 +439,24 @@ Probable new files:
 
 ## Testing Strategy
 
-There is no existing automated test harness for rendering in this repo, so verification is primarily build plus manual runtime checks.
+This repo now has a JUnit 5 harness wired through Ant:
+
+- unit tests live under `test/unit`
+- shared test helpers live under `test/support`
+- `build.xml` provides `compile-test`, `test-unit`, and `test` targets backed by `junitlauncher`
+
+Use that harness for all logic that does not require a live rendered client.
+
+Automate at least:
+
+1. API exposure for `OverlayManager` and overlay contracts
+2. owner-scoped unregister and disposal
+3. screen overlay ordering by priority then registration order
+4. repeated overlay failure handling and auto-disable behavior
+5. map bridge type contract and manager dispatch ordering
+6. shared-service lifecycle expectations such as overlay cleanup on `PaistiServices.stop()` and registration survival across UI swaps when services stay alive
+
+Manual verification is still required for actual on-screen rendering behavior, because the JUnit harness does not exercise a live game session or real draw output.
 
 Minimum useful manual checks:
 
@@ -422,6 +466,10 @@ Minimum useful manual checks:
 4. relog or recreate the session and confirm overlays continue rendering without re-registering
 5. disable the plugin and confirm overlays disappear and resources are cleaned up
 6. force an overlay exception and confirm only that overlay fails while the client keeps rendering
+
+Minimum automated verification:
+
+- `ant test-unit -buildfile build.xml`
 
 Minimum build verification:
 
