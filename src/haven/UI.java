@@ -1200,13 +1200,19 @@ public class UI {
 	synchronized (guiLock) {
 	    this.gui = gui;
 	}
+	paistiServices.overlayManager().syncMapOverlayAttachment();
     }
     
     public void clearGUI(GameUI gui) {
+	boolean cleared = false;
 	synchronized (guiLock) {
 	    if(this.gui == gui) {
 		this.gui = null;
+		cleared = true;
 	    }
+	}
+	if(cleared) {
+	    paistiServices.overlayManager().syncMapOverlayAttachment();
 	}
     }
 

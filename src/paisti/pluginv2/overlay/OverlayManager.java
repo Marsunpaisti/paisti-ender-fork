@@ -86,7 +86,7 @@ public class OverlayManager {
     }
 
     public void renderMapWorldOverlays(Pipe state, Render out) {
-        MapView map = currentMap();
+        MapView map = activeRenderMap();
         GameUI gui = currentGui();
         MapWorldOverlayContext ctx = new MapWorldOverlayContext(services.ui(), gui, map, state, out);
         for(RegisteredOverlay registered : sorted()) {
@@ -106,7 +106,7 @@ public class OverlayManager {
     }
 
     public void renderMapScreenOverlays(GOut g, Pipe state) {
-        MapView map = currentMap();
+        MapView map = activeRenderMap();
         GameUI gui = currentGui();
         MapScreenOverlayContext ctx = new MapScreenOverlayContext(services.ui(), gui, map, g, state);
         for(RegisteredOverlay registered : sorted()) {
@@ -180,8 +180,8 @@ public class OverlayManager {
         System.err.println("Overlay failure in plugin " + registered.owner.getName() + " overlay " + registered.overlay.id());
         t.printStackTrace(System.err);
         if(registered.failures >= MAX_CONSECUTIVE_FAILURES) {
-            registered.disabled = true;
             System.err.println("Overlay disabled after repeated failures: " + registered.overlay.id());
+            unregister(registered);
         }
     }
 
@@ -216,6 +216,10 @@ public class OverlayManager {
             return null;
         }
         return services.ui().root.findchild(MapView.class);
+    }
+
+    private MapView activeRenderMap() {
+        return (attachedMap != null) ? attachedMap : currentMap();
     }
 
     private void clearMapAttachment() {

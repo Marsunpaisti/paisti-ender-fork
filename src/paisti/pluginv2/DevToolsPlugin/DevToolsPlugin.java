@@ -5,7 +5,6 @@ import paisti.hooks.EventBus;
 import paisti.hooks.events.BeforeOutgoingWidgetMessage;
 import paisti.pluginv2.PaistiPlugin;
 import paisti.pluginv2.PluginDescription;
-import paisti.pluginv2.overlay.OverlayRegistration;
 
 import java.awt.*;
 
@@ -19,8 +18,6 @@ import java.awt.*;
 public class DevToolsPlugin extends PaistiPlugin {
     private final DevToolsPluginSceneOverlay sceneOverlay = new DevToolsPluginSceneOverlay();
     private final DevToolsPluginScreenOverlay screenOverlay = new DevToolsPluginScreenOverlay();
-    private OverlayRegistration sceneOverlayRegistration;
-    private OverlayRegistration screenOverlayRegistration;
     EventBus.Subscriber outgoingWidgetMessageSubscriber;
 
     private boolean debugOutgoingWidgetMessages(){
@@ -43,21 +40,13 @@ public class DevToolsPlugin extends PaistiPlugin {
     @Override
     public void startUp() {
 	outgoingWidgetMessageSubscriber = eventBus().register(BeforeOutgoingWidgetMessage.class, this::logOutgoingWidgetMessage, 0);
-	sceneOverlayRegistration = overlayManager().register(this, sceneOverlay);
-	screenOverlayRegistration = overlayManager().register(this, screenOverlay);
+	overlayManager().register(this, sceneOverlay);
+	overlayManager().register(this, screenOverlay);
     }
 
     @Override
     public void shutDown() {
 	eventBus().unregister(outgoingWidgetMessageSubscriber);
-	if(sceneOverlayRegistration != null) {
-	    sceneOverlayRegistration.close();
-	    sceneOverlayRegistration = null;
-	}
-	if(screenOverlayRegistration != null) {
-	    screenOverlayRegistration.close();
-	    screenOverlayRegistration = null;
-	}
 	overlayManager().unregisterAll(this);
     }
 }

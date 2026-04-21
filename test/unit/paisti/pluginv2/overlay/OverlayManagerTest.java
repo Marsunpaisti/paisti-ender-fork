@@ -144,6 +144,7 @@ class OverlayManagerTest {
 
         assertEquals(6, healthy.renders, "expected healthy overlay to keep rendering after broken overlay failures");
         assertEquals(5, broken.renders, "expected broken overlay to be disabled after five failures");
+        assertEquals(1, broken.disposeCalls, "expected broken overlay resources to be disposed immediately once it is permanently disabled");
     }
 
     @Test
@@ -252,6 +253,29 @@ class OverlayManagerTest {
 
     @Test
     @Tag("unit")
+    void mapRenderDispatchUsesAttachedBridgeMapInsteadOfReResolvedCurrentMap() throws Exception {
+        PaistiServices services = new PaistiServices();
+        OverlayManager manager = services.overlayManager();
+        TestPlugin owner = new TestPlugin(services);
+        UI ui = fakeUi(services);
+        TestMapView attached = allocate(TestMapView.class);
+        TestMapView current = allocate(TestMapView.class);
+        TrackingMapOverlay overlay = new TrackingMapOverlay("tracked", 0, null, true);
+
+        setRootMap(ui, attached);
+        services.bindUi(ui);
+        manager.register(owner, overlay);
+
+        setRootMap(ui, current);
+        manager.renderMapWorldOverlays((Pipe) null, (Render) null);
+        manager.renderMapScreenOverlays(null, null);
+
+        assertSame(attached, overlay.lastWorldMap, "expected world map overlay context to use the map that owns the active bridge");
+        assertSame(attached, overlay.lastScreenMap, "expected screen map overlay context to use the map that owns the active bridge");
+    }
+
+    @Test
+    @Tag("unit")
     void mapOverlayBridgeImplementsExpectedRenderInterfaces() throws Exception {
         Class<?> type = Class.forName("paisti.pluginv2.overlay.MapOverlayBridge");
 
@@ -316,6 +340,47 @@ class OverlayManagerTest {
         assertNull(attachedMap(manager), "expected clearUi(...) to detach the active map promptly");
         assertNull(mapSlot(manager), "expected clearUi(...) to clear the manager's map slot promptly");
         assertTrue(slot.removed, "expected clearUi(...) to remove the stale map bridge slot immediately");
+    }
+
+    @Test
+    @Tag("unit")
+    void setGuiResyncsMapBridgeWithinSameUi() throws Exception {
+        PaistiServices services = new PaistiServices();
+        OverlayManager manager = services.overlayManager();
+        UI ui = fakeUi(services);
+        TestMapView firstMap = allocate(TestMapView.class);
+        TestMapView secondMap = allocate(TestMapView.class);
+
+        setRootMap(ui, firstMap);
+        services.bindUi(ui);
+
+        TestRenderTreeSlot firstSlot = firstMap.lastSlot;
+        setRootMap(ui, secondMap);
+        ui.setGUI(null);
+
+        assertTrue(firstSlot.removed, "expected UI.setGUI(...) to remove the stale bridge slot when the current map changes inside one UI");
+        assertSame(secondMap, attachedMap(manager), "expected UI.setGUI(...) to attach the bridge to the replacement map immediately");
+        assertEquals(1, secondMap.drawaddCalls, "expected replacement map to receive the bridge immediately from UI.setGUI(...)");
+    }
+
+    @Test
+    @Tag("unit")
+    void clearGuiResyncsMapBridgeWithinSameUi() throws Exception {
+        PaistiServices services = new PaistiServices();
+        OverlayManager manager = services.overlayManager();
+        UI ui = fakeUi(services);
+        TestMapView map = allocate(TestMapView.class);
+
+        setRootMap(ui, map);
+        services.bindUi(ui);
+
+        TestRenderTreeSlot slot = map.lastSlot;
+        setRootMap(ui, null);
+        ui.clearGUI(null);
+
+        assertNull(attachedMap(manager), "expected UI.clearGUI(...) to detach the active map bridge when the UI no longer exposes a map");
+        assertNull(mapSlot(manager), "expected UI.clearGUI(...) to clear the active map slot immediately");
+        assertTrue(slot.removed, "expected UI.clearGUI(...) to remove the stale bridge slot immediately");
     }
 
     private static class TrackingScreenOverlay implements ScreenOverlay {
@@ -384,6 +449,8 @@ class OverlayManagerTest {
         private final int priority;
         private final List<String> trace;
         private final boolean enabled;
+        private MapView lastWorldMap;
+        private MapView lastScreenMap;
 
         private TrackingMapOverlay(String name, int priority, List<String> trace, boolean enabled) {
             this.name = name;
@@ -404,6 +471,7 @@ class OverlayManagerTest {
 
         @Override
         public void renderWorld(MapWorldOverlayContext ctx) {
+            lastWorldMap = ctx.map();
             if(trace != null) {
                 trace.add("world:" + name);
             }
@@ -411,6 +479,7 @@ class OverlayManagerTest {
 
         @Override
         public void renderScreen(MapScreenOverlayContext ctx) {
+            lastScreenMap = ctx.map();
             if(trace != null) {
                 trace.add("screen:" + name);
             }
@@ -418,6 +487,8 @@ class OverlayManagerTest {
     }
 
     private static final class ThrowingScreenOverlay extends TrackingScreenOverlay {
+        private int disposeCalls;
+
         private ThrowingScreenOverlay() {
             super("broken", 0);
         }
@@ -426,6 +497,12 @@ class OverlayManagerTest {
         public void render(ScreenOverlayContext ctx) {
             renders++;
             throw new RuntimeException("boom");
+        }
+
+        @Override
+        public void dispose() {
+            disposeCalls++;
+            super.dispose();
         }
     }
 
