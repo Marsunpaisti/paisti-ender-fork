@@ -218,12 +218,24 @@ class PaistiServicesLifetimeTest {
         private int renders;
         private UI lastUi;
         private GOut lastGOut;
+        private final List<String> trace;
+
+        private TrackingScreenOverlay() {
+            this(null);
+        }
+
+        private TrackingScreenOverlay(List<String> trace) {
+            this.trace = trace;
+        }
 
         @Override
         public void render(ScreenOverlayContext ctx) {
             renders++;
             lastUi = ctx.ui();
             lastGOut = ctx.g();
+            if(trace != null) {
+                trace.add("overlay");
+            }
         }
 
         @Override
@@ -279,12 +291,11 @@ class PaistiServicesLifetimeTest {
 
     @Test
     @Tag("unit")
-    void stopDisposesRegisteredOverlays() throws Exception {
+    void stopDisposesRegisteredOverlaysEvenBeforeServicesStart() {
         PaistiServices services = new PaistiServices();
         TrackingScreenOverlay overlay = new TrackingScreenOverlay();
 
         services.overlayManager().register(new TestPlugin(services), overlay);
-        setField(PaistiServices.class, services, "started", true);
 
         services.stop();
 
@@ -294,16 +305,19 @@ class PaistiServicesLifetimeTest {
 
     @Test
     @Tag("unit")
-    void uiDrawRendersRegisteredScreenOverlaysFromSharedServices() throws Exception {
+    void uiDrawRendersRegisteredScreenOverlaysAfterAfterDrawCallbacks() throws Exception {
         PaistiServices services = new PaistiServices();
         UI ui = fakeUi(services);
-        TrackingScreenOverlay overlay = new TrackingScreenOverlay();
+        List<String> trace = new ArrayList<>();
+        TrackingScreenOverlay overlay = new TrackingScreenOverlay(trace);
 
         services.bindUi(ui);
         services.overlayManager().register(new TestPlugin(services), overlay);
+        ui.drawafter(g -> trace.add("afterdraw"));
 
         ui.draw(null);
 
+        assertEquals(List.of("afterdraw", "overlay"), trace, "UI.draw() must render shared screen overlays after existing AfterDraw callbacks");
         assertEquals(1, overlay.renders, "UI.draw() must render overlays registered in shared PaistiServices");
         assertSame(ui, overlay.lastUi, "screen overlay render context must expose the active shared UI");
         assertSame(null, overlay.lastGOut, "screen overlay render context must pass through the GOut used by UI.draw()");

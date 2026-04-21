@@ -51,10 +51,10 @@ public class PaistiServices {
     }
 
     public synchronized void stop() {
-	if(!started)
-	    return;
-	started = false;
-	pluginService.stopAll();
+	if(started) {
+	    started = false;
+	    pluginService.stopAll();
+	}
 	overlayManager.stop();
     }
 }
