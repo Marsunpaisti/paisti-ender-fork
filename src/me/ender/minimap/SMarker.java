@@ -3,24 +3,29 @@ package me.ender.minimap;
 import haven.*;
 import me.ender.QuestCondition;
 
-import java.util.Objects;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
 public class SMarker extends Marker {
-    public final long oid;
-    public final Resource.Saved res;
+    public UID oid;
+    public Resource.Saved res;
+    public byte[] data;
 
     public List<QuestCondition> questConditions = new ArrayList<>();
     public Iterator<QuestCondition> questIterator;
 
-    public SMarker(long seg, Coord tc, String nm, long oid, Resource.Saved res) {
+    public SMarker(long seg, Coord tc, String nm, UID oid, Resource.Saved res, byte[] data) {
 	super(seg, tc, nm);
 	this.oid = oid;
 	this.res = res;
+	this.data = data;
 	questIterator = Utils.circularIterator(questConditions);
     }
+
+    public SMarker(long seg, Coord tc, String nm, long oid, Resource.Saved res) {
+	this(seg, tc, nm, UID.of(oid), res, new byte[0]);
+	}
     
     @Override
     public boolean equals(Object o) {
@@ -28,7 +33,7 @@ public class SMarker extends Marker {
 	if(o == null || getClass() != o.getClass()) return false;
 	if(!super.equals(o)) return false;
 	SMarker sMarker = (SMarker) o;
-	return oid == sMarker.oid && res.equals(sMarker.res);
+	return oid.equals(sMarker.oid) && res.equals(sMarker.res);
     }
     
     @Override
@@ -68,6 +73,6 @@ public class SMarker extends Marker {
     
     @Override
     public int hashCode() {
-	return Objects.hash(super.hashCode(), oid, res);
+	return 31 * super.hashCode() + oid.hashCode();
     }
 }
