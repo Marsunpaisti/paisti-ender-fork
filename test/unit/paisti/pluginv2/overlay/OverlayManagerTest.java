@@ -5,6 +5,7 @@ import haven.PView;
 import haven.Coord;
 import haven.Coord2d;
 import haven.ActAudio;
+import haven.Loading;
 import haven.MapView;
 import haven.RootWidget;
 import haven.UI;
@@ -215,6 +216,48 @@ class OverlayManagerTest {
 
     @Test
     @Tag("unit")
+    void screenOverlayLoadingIsTreatedAsTransientAndDoesNotDisableOverlay() {
+        OverlayManager manager = new OverlayManager(new PaistiServices());
+        TestPlugin owner = new TestPlugin(new PaistiServices());
+        LoadingScreenOverlay loading = new LoadingScreenOverlay();
+        TrackingScreenOverlay healthy = new TrackingScreenOverlay("healthy", 0);
+
+        manager.register(owner, loading);
+        manager.register(owner, healthy);
+
+        for(int i = 0; i < 6; i++) {
+            renderScreenOverlays(manager);
+        }
+
+        assertEquals(6, loading.renders, "expected loading overlay to be retried every frame");
+        assertEquals(0, loading.disposeCalls, "expected loading overlay not to be disposed as a permanent failure");
+        assertEquals(6, healthy.renders, "expected sibling overlays to keep rendering past transient loading");
+        assertTrue(!healthy.disposed, "expected healthy overlay to remain active through transient loading");
+    }
+
+    @Test
+    @Tag("unit")
+    void throwingScreenEnabledPredicateIsIsolatedFromRenderPass() {
+        OverlayManager manager = new OverlayManager(new PaistiServices());
+        TestPlugin owner = new TestPlugin(new PaistiServices());
+        ThrowingEnabledScreenOverlay broken = new ThrowingEnabledScreenOverlay();
+        TrackingScreenOverlay healthy = new TrackingScreenOverlay("healthy", 0);
+
+        manager.register(owner, broken);
+        manager.register(owner, healthy);
+
+        for(int i = 0; i < 6; i++) {
+            renderScreenOverlays(manager);
+        }
+
+        assertEquals(6, healthy.renders, "expected healthy overlay to keep rendering when another overlay's enabled() throws");
+        assertEquals(5, broken.enabledCalls, "expected throwing enabled() overlay to be disabled after five failures");
+        assertEquals(1, broken.disposeCalls, "expected throwing enabled() overlay to be disposed after repeated failures");
+        assertTrue(!healthy.disposed, "expected healthy overlay to remain active when another overlay's enabled() throws");
+    }
+
+    @Test
+    @Tag("unit")
     void mapOverlaysExcludeDisabledByEnabledFlag() {
         OverlayManager manager = new OverlayManager(new PaistiServices());
         TestPlugin owner = new TestPlugin(new PaistiServices());
@@ -312,6 +355,47 @@ class OverlayManagerTest {
         assertEquals(5, broken.worldRenders, "expected succeeding world phase to stop once the overlay is disabled by screen failures");
         assertEquals(1, broken.disposeCalls, "expected map overlay resources to be disposed when screen failures disable it");
         assertTrue(manager.mapOverlays().isEmpty(), "expected broken map overlay to be removed after repeated screen failures");
+    }
+
+    @Test
+    @Tag("unit")
+    void mapOverlayLoadingIsTreatedAsTransientAcrossBothRenderPhases() {
+        OverlayManager manager = new OverlayManager(new PaistiServices());
+        TestPlugin owner = new TestPlugin(new PaistiServices());
+        LoadingMapOverlay loading = new LoadingMapOverlay();
+
+        manager.register(owner, loading);
+
+        for(int i = 0; i < 6; i++) {
+            manager.renderMapWorldOverlays(null, null);
+            manager.renderMapScreenOverlays(null, null);
+        }
+
+        assertEquals(6, loading.worldCalls, "expected world loading overlay to be retried every frame");
+        assertEquals(6, loading.screenCalls, "expected screen loading overlay to be retried every frame");
+        assertEquals(0, loading.disposeCalls, "expected loading map overlay not to be disposed as a permanent failure");
+    }
+
+    @Test
+    @Tag("unit")
+    void throwingMapEnabledPredicateIsIsolatedFromBothRenderPhases() {
+        OverlayManager manager = new OverlayManager(new PaistiServices());
+        TestPlugin owner = new TestPlugin(new PaistiServices());
+        ThrowingEnabledMapOverlay broken = new ThrowingEnabledMapOverlay();
+        TrackingMapOverlay healthy = new TrackingMapOverlay("healthy", 0, null, true);
+
+        manager.register(owner, broken);
+        manager.register(owner, healthy);
+
+        for(int i = 0; i < 6; i++) {
+            manager.renderMapWorldOverlays(null, null);
+            manager.renderMapScreenOverlays(null, null);
+        }
+
+        assertEquals(6, healthy.worldCalls, "expected healthy map overlay world phase to keep rendering when another overlay's enabled() throws");
+        assertEquals(6, healthy.screenCalls, "expected healthy map overlay screen phase to keep rendering when another overlay's enabled() throws");
+        assertTrue(broken.enabledCalls >= 5, "expected throwing map enabled() overlay to be retried until it is disabled");
+        assertEquals(1, broken.disposeCalls, "expected throwing map enabled() overlay to be disposed after repeated failures");
     }
 
     @Test
@@ -484,6 +568,47 @@ class OverlayManagerTest {
         }
     }
 
+    private static final class LoadingScreenOverlay extends TrackingScreenOverlay {
+        private int disposeCalls;
+
+        private LoadingScreenOverlay() {
+            super("loading", 0);
+        }
+
+        @Override
+        public void render(ScreenOverlayContext ctx) {
+            renders++;
+            throw new Loading();
+        }
+
+        @Override
+        public void dispose() {
+            disposeCalls++;
+            super.dispose();
+        }
+    }
+
+    private static final class ThrowingEnabledScreenOverlay extends TrackingScreenOverlay {
+        private int enabledCalls;
+        private int disposeCalls;
+
+        private ThrowingEnabledScreenOverlay() {
+            super("enabled-broken", 0);
+        }
+
+        @Override
+        public boolean enabled() {
+            enabledCalls++;
+            throw new RuntimeException("enabled-boom");
+        }
+
+        @Override
+        public void dispose() {
+            disposeCalls++;
+            super.dispose();
+        }
+    }
+
     private static final class TrackingMapOverlay implements MapOverlay {
         private final String name;
         private final int priority;
@@ -491,6 +616,8 @@ class OverlayManagerTest {
         private final boolean enabled;
         private MapView lastWorldMap;
         private MapView lastScreenMap;
+        private int worldCalls;
+        private int screenCalls;
 
         private TrackingMapOverlay(String name, int priority, List<String> trace, boolean enabled) {
             this.name = name;
@@ -511,6 +638,7 @@ class OverlayManagerTest {
 
         @Override
         public void renderWorld(MapWorldOverlayContext ctx) {
+            worldCalls++;
             lastWorldMap = ctx.map();
             if(trace != null) {
                 trace.add("world:" + name);
@@ -519,6 +647,7 @@ class OverlayManagerTest {
 
         @Override
         public void renderScreen(MapScreenOverlayContext ctx) {
+            screenCalls++;
             lastScreenMap = ctx.map();
             if(trace != null) {
                 trace.add("screen:" + name);
@@ -580,6 +709,45 @@ class OverlayManagerTest {
             if(failScreen) {
                 throw new RuntimeException("screen-boom");
             }
+        }
+
+        @Override
+        public void dispose() {
+            disposeCalls++;
+        }
+    }
+
+    private static final class LoadingMapOverlay implements MapOverlay {
+        private int worldCalls;
+        private int screenCalls;
+        private int disposeCalls;
+
+        @Override
+        public void renderWorld(MapWorldOverlayContext ctx) {
+            worldCalls++;
+            throw new Loading();
+        }
+
+        @Override
+        public void renderScreen(MapScreenOverlayContext ctx) {
+            screenCalls++;
+            throw new Loading();
+        }
+
+        @Override
+        public void dispose() {
+            disposeCalls++;
+        }
+    }
+
+    private static final class ThrowingEnabledMapOverlay implements MapOverlay {
+        private int enabledCalls;
+        private int disposeCalls;
+
+        @Override
+        public boolean enabled() {
+            enabledCalls++;
+            throw new RuntimeException("enabled-boom");
         }
 
         @Override

@@ -2,6 +2,7 @@ package paisti.pluginv2.overlay;
 
 import haven.GOut;
 import haven.GameUI;
+import haven.Loading;
 import haven.MapView;
 import haven.PaistiServices;
 import haven.render.Pipe;
@@ -93,12 +94,16 @@ public class OverlayManager {
             if(!(registered.overlay instanceof MapOverlay)) {
                 continue;
             }
-            if(registered.disabled || !registered.overlay.enabled()) {
+            if(registered.disabled) {
                 continue;
             }
             try {
+                if(!registered.overlay.enabled()) {
+                    continue;
+                }
                 ((MapOverlay) registered.overlay).renderWorld(ctx);
                 registered.mapWorldFailures = 0;
+            } catch(Loading l) {
             } catch(Throwable t) {
                 handleFailure(registered, t, Phase.MAP_WORLD);
             }
@@ -113,12 +118,16 @@ public class OverlayManager {
             if(!(registered.overlay instanceof MapOverlay)) {
                 continue;
             }
-            if(registered.disabled || !registered.overlay.enabled()) {
+            if(registered.disabled) {
                 continue;
             }
             try {
+                if(!registered.overlay.enabled()) {
+                    continue;
+                }
                 ((MapOverlay) registered.overlay).renderScreen(ctx);
                 registered.mapScreenFailures = 0;
+            } catch(Loading l) {
             } catch(Throwable t) {
                 handleFailure(registered, t, Phase.MAP_SCREEN);
             }
@@ -138,18 +147,21 @@ public class OverlayManager {
     }
 
     public void renderScreenOverlays(GOut g) {
-        syncMapOverlayAttachment();
         ScreenOverlayContext ctx = new ScreenOverlayContext(services.ui(), g);
         for(RegisteredOverlay registered : sorted()) {
             if(!(registered.overlay instanceof ScreenOverlay)) {
                 continue;
             }
-            if(registered.disabled || !registered.overlay.enabled()) {
+            if(registered.disabled) {
                 continue;
             }
             try {
+                if(!registered.overlay.enabled()) {
+                    continue;
+                }
                 ((ScreenOverlay) registered.overlay).render(ctx);
                 registered.screenFailures = 0;
+            } catch(Loading l) {
             } catch(Throwable t) {
                 handleFailure(registered, t, Phase.SCREEN);
             }
