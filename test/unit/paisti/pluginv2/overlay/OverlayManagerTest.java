@@ -276,6 +276,46 @@ class OverlayManagerTest {
 
     @Test
     @Tag("unit")
+    void repeatedWorldFailuresDisableMapOverlayEvenWhenScreenSucceeds() {
+        OverlayManager manager = new OverlayManager(new PaistiServices());
+        TestPlugin owner = new TestPlugin(new PaistiServices());
+        ThrowingMapOverlay broken = ThrowingMapOverlay.worldOnly();
+
+        manager.register(owner, broken);
+
+        for(int i = 0; i < 6; i++) {
+            manager.renderMapWorldOverlays(null, null);
+            manager.renderMapScreenOverlays(null, null);
+        }
+
+        assertEquals(5, broken.worldRenders, "expected broken world phase to be disabled after five failures");
+        assertEquals(4, broken.screenRenders, "expected succeeding screen phase to stop once the overlay is disabled by world failures");
+        assertEquals(1, broken.disposeCalls, "expected map overlay resources to be disposed when world failures disable it");
+        assertTrue(manager.mapOverlays().isEmpty(), "expected broken map overlay to be removed after repeated world failures");
+    }
+
+    @Test
+    @Tag("unit")
+    void repeatedScreenFailuresDisableMapOverlayEvenWhenWorldSucceeds() {
+        OverlayManager manager = new OverlayManager(new PaistiServices());
+        TestPlugin owner = new TestPlugin(new PaistiServices());
+        ThrowingMapOverlay broken = ThrowingMapOverlay.screenOnly();
+
+        manager.register(owner, broken);
+
+        for(int i = 0; i < 6; i++) {
+            manager.renderMapWorldOverlays(null, null);
+            manager.renderMapScreenOverlays(null, null);
+        }
+
+        assertEquals(5, broken.screenRenders, "expected broken screen phase to be disabled after five failures");
+        assertEquals(5, broken.worldRenders, "expected succeeding world phase to stop once the overlay is disabled by screen failures");
+        assertEquals(1, broken.disposeCalls, "expected map overlay resources to be disposed when screen failures disable it");
+        assertTrue(manager.mapOverlays().isEmpty(), "expected broken map overlay to be removed after repeated screen failures");
+    }
+
+    @Test
+    @Tag("unit")
     void mapOverlayBridgeImplementsExpectedRenderInterfaces() throws Exception {
         Class<?> type = Class.forName("paisti.pluginv2.overlay.MapOverlayBridge");
 
@@ -503,6 +543,48 @@ class OverlayManagerTest {
         public void dispose() {
             disposeCalls++;
             super.dispose();
+        }
+    }
+
+    private static final class ThrowingMapOverlay implements MapOverlay {
+        private final boolean failWorld;
+        private final boolean failScreen;
+        private int worldRenders;
+        private int screenRenders;
+        private int disposeCalls;
+
+        private ThrowingMapOverlay(boolean failWorld, boolean failScreen) {
+            this.failWorld = failWorld;
+            this.failScreen = failScreen;
+        }
+
+        private static ThrowingMapOverlay worldOnly() {
+            return new ThrowingMapOverlay(true, false);
+        }
+
+        private static ThrowingMapOverlay screenOnly() {
+            return new ThrowingMapOverlay(false, true);
+        }
+
+        @Override
+        public void renderWorld(MapWorldOverlayContext ctx) {
+            worldRenders++;
+            if(failWorld) {
+                throw new RuntimeException("world-boom");
+            }
+        }
+
+        @Override
+        public void renderScreen(MapScreenOverlayContext ctx) {
+            screenRenders++;
+            if(failScreen) {
+                throw new RuntimeException("screen-boom");
+            }
+        }
+
+        @Override
+        public void dispose() {
+            disposeCalls++;
         }
     }
 

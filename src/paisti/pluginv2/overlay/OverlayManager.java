@@ -98,9 +98,9 @@ public class OverlayManager {
             }
             try {
                 ((MapOverlay) registered.overlay).renderWorld(ctx);
-                registered.failures = 0;
+                registered.mapWorldFailures = 0;
             } catch(Throwable t) {
-                handleFailure(registered, t);
+                handleFailure(registered, t, Phase.MAP_WORLD);
             }
         }
     }
@@ -118,9 +118,9 @@ public class OverlayManager {
             }
             try {
                 ((MapOverlay) registered.overlay).renderScreen(ctx);
-                registered.failures = 0;
+                registered.mapScreenFailures = 0;
             } catch(Throwable t) {
-                handleFailure(registered, t);
+                handleFailure(registered, t, Phase.MAP_SCREEN);
             }
         }
     }
@@ -149,9 +149,9 @@ public class OverlayManager {
             }
             try {
                 ((ScreenOverlay) registered.overlay).render(ctx);
-                registered.failures = 0;
+                registered.screenFailures = 0;
             } catch(Throwable t) {
-                handleFailure(registered, t);
+                handleFailure(registered, t, Phase.SCREEN);
             }
         }
     }
@@ -175,11 +175,11 @@ public class OverlayManager {
         return ordered;
     }
 
-    private void handleFailure(RegisteredOverlay registered, Throwable t) {
-        registered.failures++;
+    private void handleFailure(RegisteredOverlay registered, Throwable t, Phase phase) {
+        int failures = phase.increment(registered);
         System.err.println("Overlay failure in plugin " + registered.owner.getName() + " overlay " + registered.overlay.id());
         t.printStackTrace(System.err);
-        if(registered.failures >= MAX_CONSECUTIVE_FAILURES) {
+        if(failures >= MAX_CONSECUTIVE_FAILURES) {
             System.err.println("Overlay disabled after repeated failures: " + registered.overlay.id());
             unregister(registered);
         }
@@ -235,7 +235,9 @@ public class OverlayManager {
         private final PaistiPlugin owner;
         private final PluginOverlay overlay;
         private final long order;
-        private int failures;
+        private int screenFailures;
+        private int mapWorldFailures;
+        private int mapScreenFailures;
         private boolean disabled;
 
         private RegisteredOverlay(PaistiPlugin owner, PluginOverlay overlay, long order) {
@@ -247,5 +249,28 @@ public class OverlayManager {
         PluginOverlay overlay() {
             return overlay;
         }
+    }
+
+    private enum Phase {
+        SCREEN {
+            @Override
+            int increment(RegisteredOverlay registered) {
+                return ++registered.screenFailures;
+            }
+        },
+        MAP_WORLD {
+            @Override
+            int increment(RegisteredOverlay registered) {
+                return ++registered.mapWorldFailures;
+            }
+        },
+        MAP_SCREEN {
+            @Override
+            int increment(RegisteredOverlay registered) {
+                return ++registered.mapScreenFailures;
+            }
+        };
+
+        abstract int increment(RegisteredOverlay registered);
     }
 }
