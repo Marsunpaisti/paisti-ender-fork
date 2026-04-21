@@ -131,6 +131,86 @@ class OverlayManagerTest {
         assertEquals(5, broken.renders, "expected broken overlay to be disabled after five failures");
     }
 
+    @Test
+    @Tag("unit")
+    void registrationHandleOnlyClosesItsOwnRegistration() {
+        OverlayManager manager = new OverlayManager(new PaistiServices());
+        TestPlugin owner = new TestPlugin(new PaistiServices());
+        CountingScreenOverlay overlay = new CountingScreenOverlay("shared", 0);
+
+        OverlayRegistration first = manager.register(owner, overlay);
+        OverlayRegistration second = manager.register(owner, overlay);
+
+        first.close();
+
+        assertEquals(1, manager.screenOverlays().size(), "expected one registration to remain after closing the first handle");
+        assertEquals(0, overlay.disposeCalls, "expected shared overlay instance to stay undisposed while a newer registration remains");
+
+        first.close();
+
+        assertEquals(1, manager.screenOverlays().size(), "expected stale handle close to leave the newer registration intact");
+        assertEquals(0, overlay.disposeCalls, "expected stale handle close not to dispose the newer registration");
+
+        second.close();
+
+        assertTrue(manager.screenOverlays().isEmpty(), "expected all registrations to be gone after closing the second handle");
+        assertEquals(1, overlay.disposeCalls, "expected overlay instance to be disposed exactly once when its last registration closes");
+    }
+
+    @Test
+    @Tag("unit")
+    void unregisterRemovesOnlyOneMatchingRegistrationAtATime() {
+        OverlayManager manager = new OverlayManager(new PaistiServices());
+        TestPlugin owner = new TestPlugin(new PaistiServices());
+        CountingScreenOverlay overlay = new CountingScreenOverlay("shared", 0);
+
+        manager.register(owner, overlay);
+        manager.register(owner, overlay);
+
+        manager.unregister(overlay);
+
+        assertEquals(1, manager.screenOverlays().size(), "expected unregister(overlay) to remove only one matching registration");
+        assertEquals(0, overlay.disposeCalls, "expected overlay instance not to be disposed while another registration is still active");
+
+        manager.unregister(overlay);
+
+        assertTrue(manager.screenOverlays().isEmpty(), "expected second unregister(overlay) call to remove the final registration");
+        assertEquals(1, overlay.disposeCalls, "expected overlay instance to be disposed once after the last matching registration is removed");
+    }
+
+    @Test
+    @Tag("unit")
+    void screenOverlaysExcludeDisabledByEnabledFlagAndRenderingMatches() {
+        OverlayManager manager = new OverlayManager(new PaistiServices());
+        TestPlugin owner = new TestPlugin(new PaistiServices());
+        TrackingScreenOverlay healthy = new TrackingScreenOverlay("healthy", 0);
+        DisabledScreenOverlay disabled = new DisabledScreenOverlay("disabled", 0);
+
+        manager.register(owner, disabled);
+        manager.register(owner, healthy);
+
+        assertEquals(List.of(healthy), manager.screenOverlays(), "expected screen overlay list to exclude overlays whose enabled() is false");
+
+        renderScreenOverlays(manager);
+
+        assertEquals(1, healthy.renders, "expected enabled screen overlay to render");
+        assertEquals(0, disabled.renders, "expected disabled screen overlay not to render");
+    }
+
+    @Test
+    @Tag("unit")
+    void mapOverlaysExcludeDisabledByEnabledFlag() {
+        OverlayManager manager = new OverlayManager(new PaistiServices());
+        TestPlugin owner = new TestPlugin(new PaistiServices());
+        TrackingMapOverlay healthy = new TrackingMapOverlay(true);
+        TrackingMapOverlay disabled = new TrackingMapOverlay(false);
+
+        manager.register(owner, disabled);
+        manager.register(owner, healthy);
+
+        assertEquals(List.of(healthy), manager.mapOverlays(), "expected map overlay list to exclude overlays whose enabled() is false");
+    }
+
     private static class TrackingScreenOverlay implements ScreenOverlay {
         private final String name;
         private final int priority;
@@ -164,6 +244,44 @@ class OverlayManagerTest {
         @Override
         public void dispose() {
             disposed = true;
+        }
+    }
+
+    private static final class CountingScreenOverlay extends TrackingScreenOverlay {
+        private int disposeCalls;
+
+        private CountingScreenOverlay(String name, int priority) {
+            super(name, priority);
+        }
+
+        @Override
+        public void dispose() {
+            disposeCalls++;
+            super.dispose();
+        }
+    }
+
+    private static final class DisabledScreenOverlay extends TrackingScreenOverlay {
+        private DisabledScreenOverlay(String name, int priority) {
+            super(name, priority);
+        }
+
+        @Override
+        public boolean enabled() {
+            return false;
+        }
+    }
+
+    private static final class TrackingMapOverlay implements MapOverlay {
+        private final boolean enabled;
+
+        private TrackingMapOverlay(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        @Override
+        public boolean enabled() {
+            return enabled;
         }
     }
 

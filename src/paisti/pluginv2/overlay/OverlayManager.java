@@ -7,6 +7,7 @@ import paisti.pluginv2.PaistiPlugin;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 public class OverlayManager {
@@ -14,7 +15,7 @@ public class OverlayManager {
 
     private final PaistiServices services;
     private final CopyOnWriteArrayList<RegisteredOverlay> overlays = new CopyOnWriteArrayList<>();
-    private long nextOrder;
+    private final AtomicLong nextOrder = new AtomicLong();
 
     public OverlayManager(PaistiServices services) {
         this.services = services;
@@ -27,24 +28,30 @@ public class OverlayManager {
         if(overlay == null) {
             throw new IllegalArgumentException("overlay must not be null");
         }
-        overlays.add(new RegisteredOverlay(owner, overlay, nextOrder++));
-        return new OverlayRegistration(this, overlay);
+        RegisteredOverlay registered = new RegisteredOverlay(owner, overlay, nextOrder.getAndIncrement());
+        overlays.add(registered);
+        return new OverlayRegistration(this, registered);
     }
 
     public void unregister(PluginOverlay overlay) {
         for(RegisteredOverlay registered : overlays) {
             if(registered.overlay == overlay) {
-                overlays.remove(registered);
-                disposeQuietly(registered);
+                unregister(registered);
+                break;
             }
+        }
+    }
+
+    void unregister(RegisteredOverlay registration) {
+        if(overlays.remove(registration)) {
+            disposeIfOrphaned(registration);
         }
     }
 
     public void unregisterAll(PaistiPlugin owner) {
         for(RegisteredOverlay registered : overlays) {
             if(registered.owner == owner) {
-                overlays.remove(registered);
-                disposeQuietly(registered);
+                unregister(registered);
             }
         }
     }
@@ -52,7 +59,7 @@ public class OverlayManager {
     public List<ScreenOverlay> screenOverlays() {
         List<ScreenOverlay> result = new ArrayList<>();
         for(RegisteredOverlay registered : sorted()) {
-            if((registered.overlay instanceof ScreenOverlay) && !registered.disabled) {
+            if((registered.overlay instanceof ScreenOverlay) && !registered.disabled && registered.overlay.enabled()) {
                 result.add((ScreenOverlay) registered.overlay);
             }
         }
@@ -62,7 +69,7 @@ public class OverlayManager {
     public List<MapOverlay> mapOverlays() {
         List<MapOverlay> result = new ArrayList<>();
         for(RegisteredOverlay registered : sorted()) {
-            if((registered.overlay instanceof MapOverlay) && !registered.disabled) {
+            if((registered.overlay instanceof MapOverlay) && !registered.disabled && registered.overlay.enabled()) {
                 result.add((MapOverlay) registered.overlay);
             }
         }
@@ -89,8 +96,7 @@ public class OverlayManager {
 
     public void stop() {
         for(RegisteredOverlay registered : overlays) {
-            overlays.remove(registered);
-            disposeQuietly(registered);
+            unregister(registered);
         }
     }
 
@@ -125,7 +131,16 @@ public class OverlayManager {
         }
     }
 
-    private static final class RegisteredOverlay {
+    private void disposeIfOrphaned(RegisteredOverlay removed) {
+        for(RegisteredOverlay registered : overlays) {
+            if(registered.overlay == removed.overlay) {
+                return;
+            }
+        }
+        disposeQuietly(removed);
+    }
+
+    static final class RegisteredOverlay {
         private final PaistiPlugin owner;
         private final PluginOverlay overlay;
         private final long order;
@@ -136,6 +151,10 @@ public class OverlayManager {
             this.owner = owner;
             this.overlay = overlay;
             this.order = order;
+        }
+
+        PluginOverlay overlay() {
+            return overlay;
         }
     }
 }
