@@ -14,10 +14,12 @@ import sun.misc.Unsafe;
 import java.awt.Canvas;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.LinkedList;
 import java.util.List;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -51,6 +53,7 @@ class PaistiServicesLifetimeTest {
         setField(UI.class, ui, "root", allocate(TestRootWidget.class));
         setField(UI.class, ui, "audio", new TestAudioRoot());
         setField(UI.class, ui, "cons", new Console());
+        setField(UI.class, ui, "afterdraws", new LinkedList<UI.AfterDraw>());
         return ui;
     }
 
@@ -180,6 +183,10 @@ class PaistiServicesLifetimeTest {
         public void destroy() {
             destroyed = true;
         }
+
+        @Override
+        public void draw(GOut g) {
+        }
     }
 
     private static final class TestAudioRoot extends ActAudio.Root {
@@ -208,9 +215,15 @@ class PaistiServicesLifetimeTest {
 
     private static final class TrackingScreenOverlay implements ScreenOverlay {
         private boolean disposed;
+        private int renders;
+        private UI lastUi;
+        private GOut lastGOut;
 
         @Override
         public void render(ScreenOverlayContext ctx) {
+            renders++;
+            lastUi = ctx.ui();
+            lastGOut = ctx.g();
         }
 
         @Override
@@ -281,22 +294,20 @@ class PaistiServicesLifetimeTest {
 
     @Test
     @Tag("unit")
-    void uiSwapDoesNotClearOverlayRegistrationsWhileServicesStayStarted() throws Exception {
+    void uiDrawRendersRegisteredScreenOverlaysFromSharedServices() throws Exception {
         PaistiServices services = new PaistiServices();
-        UI first = allocate(UI.class);
-        UI second = allocate(UI.class);
+        UI ui = fakeUi(services);
         TrackingScreenOverlay overlay = new TrackingScreenOverlay();
 
-        services.bindUi(first);
+        services.bindUi(ui);
         services.overlayManager().register(new TestPlugin(services), overlay);
-        setField(PaistiServices.class, services, "started", true);
 
-        services.clearUi(first);
-        services.bindUi(second);
+        ui.draw(null);
 
-        assertSame(second, services.ui(), "UI swap should keep the new UI bound while services stay started");
-        assertSame(overlay, services.overlayManager().screenOverlays().get(0), "UI swaps must not silently clear overlay registrations while services remain started");
-        assertFalse(overlay.disposed, "UI swaps must not dispose overlays while shared services remain started");
+        assertEquals(1, overlay.renders, "UI.draw() must render overlays registered in shared PaistiServices");
+        assertSame(ui, overlay.lastUi, "screen overlay render context must expose the active shared UI");
+        assertSame(null, overlay.lastGOut, "screen overlay render context must pass through the GOut used by UI.draw()");
+        assertFalse(overlay.disposed, "rendering must not dispose the overlay registration");
     }
 
     @Test
