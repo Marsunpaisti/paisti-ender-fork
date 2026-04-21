@@ -31,8 +31,7 @@ import me.ender.WindowDetector;
 
 import java.awt.*;
 import haven.render.*;
-import paisti.plugin.PluginManager;
-import paisti.plugin.PluginWindowEvent;
+
 
 import java.util.function.*;
 import java.awt.Color;
@@ -620,7 +619,6 @@ public class Window extends Widget {
     
     private void report(String event) {
 	Reactor.WINDOW.onNext(new Pair<>(this, event));
-	PluginWindowEvent.from(event).ifPresent(mapped -> PluginManager.get().dispatchWindow(this, mapped));
     }
     
 

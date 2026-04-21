@@ -47,7 +47,7 @@ import java.util.List;
 import static haven.ItemFilter.*;
 import haven.render.Location;
 import me.ender.alchemy.AlchemyWnd;
-import paisti.plugin.PluginManager;
+
 
 import static haven.Inventory.invsq;
 
@@ -372,7 +372,6 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
 	Config.initAutomapper(ui);
 	Timer.start(this);
 	super.attach(ui);
-	PluginManager.get().dispatchGameUiReady(this);
     }
 
     @Override

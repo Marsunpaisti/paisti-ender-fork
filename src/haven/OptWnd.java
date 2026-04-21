@@ -37,7 +37,8 @@ import me.ender.ui.CFGBox;
 import me.ender.ui.CFGSlider;
 import me.ender.ui.DrinkMeter;
 import me.ender.ui.TabStrip;
-import paisti.plugin.PluginManager;
+import paisti.pluginv2.PaistiPlugin;
+import paisti.pluginv2.PluginDescription;
 
 import java.awt.event.KeyEvent;
 import java.util.Set;
@@ -876,7 +877,23 @@ public class OptWnd extends WindowX {
     private void initPluginOptions() {
 	if(pluginOptionsInitialized)
 	    return;
-	PluginManager.get().populateOptions(this, plugins);
+	int x = 0;
+	int y = 0;
+	Widget title = plugins.add(new Label("Plugin V2", LBL_FNT), x, y);
+	y += title.sz.y + UI.scale(10);
+	for(PaistiPlugin plugin : ui.pluginService().getConfigurablePlugins()) {
+	    PluginDescription description = plugin.getClass().getAnnotation(PluginDescription.class);
+	    CFGBox toggle = new CFGBox(plugin.getName(), PluginConfig.enabled(description.configName(), description.enabledByDefault()));
+	    toggle.set(v -> ui.pluginService().syncActivePlugins());
+	    plugins.add(toggle, x, y);
+	    y += toggle.sz.y;
+	    if(!description.description().isEmpty()) {
+		Widget desc = plugins.add(new Label(description.description()), x + UI.scale(15), y + UI.scale(2));
+		y += desc.sz.y + UI.scale(7);
+	    } else {
+		y += UI.scale(5);
+	    }
+	}
 	finishPanel(plugins);
 	pluginOptionsInitialized = true;
 	if(current == plugins)

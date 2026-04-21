@@ -106,6 +106,26 @@ public class CFG<T> {
     public static final CFG<Boolean> MMAP_SHOW_PARTY_NAMES = new CFG<>("ui.mmap_party_names", false);
     public static final CFG<Integer> MMAP_SHOW_PARTY_NAMES_STYLE = new CFG<>("ui.mmap_party_names_style", 0);
     public static final CFG<Boolean> MENU_SINGLE_CTRL_CLICK = new CFG<>("ui.menu_single_ctrl_click", true);
+    private static final String CONFIG_JSON = "config.json";
+    private static final Map<Object, Object> cfg;
+    private static final Map<String, Object> cache = new HashMap<>();
+    public static final Gson gson;
+    static {
+	gson = new GsonBuilder().setPrettyPrinting()
+	    .registerTypeAdapter(Color.class, new ClientUtils.ColorSerializer())
+	    .create();
+	Map<Object, Object> tmp = null;
+	try {
+	    Type type = new TypeToken<Map<Object, Object>>() {
+	    }.getType();
+	    tmp = gson.fromJson(Config.loadFile(CONFIG_JSON), type);
+	} catch (Exception ignored) {
+	}
+	if(tmp == null) {
+	    tmp = new HashMap<>();
+	}
+	cfg = tmp;
+    }
     public static final CFG<UI.KeyMod> MENU_SKIP_AUTO_CHOOSE = new CFG<>("ui.menu_skip_auto_choose", UI.KeyMod.SHIFT);
     public static final CFG<Boolean> MENU_ADD_PICK_ALL = new CFG<>("ui.menu_add_pick_all", false);
     
@@ -178,33 +198,12 @@ public class CFG<T> {
     public static final CFG<Boolean> QUESTHELPER_HIGHLIGHT_QUESTGIVERS = new CFG<>("questhelper.highlight_questgivers", true);
     public static final CFG<Boolean> QUESTHELPER_SHOW_TASKS_IN_TOOLTIP = new CFG<>("questhelper.show_tasks_in_tooltip", true);
     public static final CFG<Boolean> QUESTHELPER_DONE_FIRST = new CFG<>("questhelper.done_first", true);
-    public static final CFG<Boolean> PLUGIN_DEMO_ENABLED = new CFG<>("plugin.demo.enabled", false);
-
-    private static final String CONFIG_JSON = "config.json";
-    private static final Map<Object, Object> cfg;
-    private static final Map<String, Object> cache = new HashMap<>();
-    public static final Gson gson;
     private final String path;
     public final T def;
     private final Type t;
     private final List<Observer<T>> observers = new LinkedList<>();
 
     static {
-	gson = new GsonBuilder().setPrettyPrinting()
-	    .registerTypeAdapter(Color.class, new ClientUtils.ColorSerializer())
-	    .create();
-	Map<Object, Object> tmp = null;
-	try {
-	    Type type = new TypeToken<Map<Object, Object>>() {
-	    }.getType();
-	    tmp = gson.fromJson(Config.loadFile(CONFIG_JSON), type);
-	} catch (Exception ignored) {
-	}
-	if(tmp == null) {
-	    tmp = new HashMap<>();
-	}
-	cfg = tmp;
-
 	BuffToggles.toggles.forEach(toggle -> toggle.cfg(
 	    new CFG<>("display.buffs." + toggle.action, true),
 	    new CFG<>("general.start_toggle." + toggle.action, false)

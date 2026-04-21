@@ -1,15 +1,19 @@
 package paisti.pluginv2;
 
 import com.google.common.collect.ImmutableList;
+import haven.Config;
 import haven.PaistiServices;
+import haven.PluginConfig;
 import paisti.pluginv2.DevToolsPlugin.DevToolsPlugin;
 
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 public class PluginService {
-	private static final ImmutableList<Class<? extends PaistiPlugin>> BUILT_IN_PLUGINS = ImmutableList.of(
+    private static final ImmutableList<Class<? extends PaistiPlugin>> BUILT_IN_PLUGINS = ImmutableList.of(
 	DevToolsPlugin.class
     );
     private final PaistiServices services;
@@ -20,7 +24,14 @@ public class PluginService {
 	this.services = services;
     }
 
+    private static void ensureMainConfigInitialized() {
+	// PluginConfig reads CFG-backed state from config.json; touching the file here forces the
+	// main config path to initialize before those reads happen in a fresh process.
+	Config.getFile("config.json");
+    }
+
     public void loadPlugins(Collection<Class<? extends PaistiPlugin>> pluginClasses) {
+	ensureMainConfigInitialized();
 	for (Class<? extends PaistiPlugin> pluginClass : pluginClasses) {
 	    PluginDescription description = pluginClass.getAnnotation(PluginDescription.class);
 	    if(description == null) {
@@ -39,6 +50,23 @@ public class PluginService {
 	    boolean alreadyLoaded = loadedPlugins.stream().anyMatch(p -> p.getClass().equals(pluginClass));
 	    if(alreadyLoaded) {
 		System.out.println("Plugin " + pluginClass.getName() + " is already loaded, skipping duplicate.");
+		continue;
+	    }
+
+	    try {
+		PluginConfig.enabled(description.configName(), description.enabledByDefault());
+	    } catch (IllegalArgumentException e) {
+		System.err.println("Plugin class " + pluginClass.getName() + " has invalid configName: " + description.configName() + ", skipping.");
+		System.err.println(e.getMessage());
+		continue;
+	    }
+
+	    boolean duplicateConfigName = loadedPlugins.stream().anyMatch(p -> {
+		PluginDescription existing = p.getClass().getAnnotation(PluginDescription.class);
+		return (existing != null) && existing.configName().equals(description.configName());
+	    });
+	    if(duplicateConfigName) {
+		System.err.println("Plugin class " + pluginClass.getName() + " uses duplicate configName '" + description.configName() + "', skipping.");
 		continue;
 	    }
 
@@ -73,6 +101,18 @@ public class PluginService {
 	return loadedPlugins;
     }
 
+    public List<PaistiPlugin> getConfigurablePlugins() {
+	List<PaistiPlugin> plugins = new ArrayList<>();
+	for (PaistiPlugin plugin : loadedPlugins) {
+	    PluginDescription description = plugin.getClass().getAnnotation(PluginDescription.class);
+	    if((description != null) && !description.hidden()) {
+		plugins.add(plugin);
+	    }
+	}
+	plugins.sort(Comparator.comparing(PaistiPlugin::getName));
+	return plugins;
+    }
+
     /**
      * Test if a plugin is enabled, which causes the client to attempt to start it on boot
      *
@@ -81,8 +121,8 @@ public class PluginService {
      */
     public boolean isPluginEnabledInConfig(PaistiPlugin plugin) {
 	final PluginDescription pluginDescriptor = plugin.getClass().getAnnotation(PluginDescription.class);
-	// TODO: Read persisted plugin state using configName when config plumbing exists.
-	return pluginDescriptor.enabledByDefault();
+	ensureMainConfigInitialized();
+	return PluginConfig.enabled(pluginDescriptor.configName(), pluginDescriptor.enabledByDefault()).get();
     }
 
     public void startPlugin(PaistiPlugin plugin) {

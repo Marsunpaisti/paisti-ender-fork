@@ -1,3 +1,0 @@
-#PAGINA LAYER FOR RES qwe//\res\paginae\add\plugins\demo_toggle.res
-#String text
-Toggle the outgoing wdgmsg logger plugin. When enabled, it logs all outgoing widget messages to chat with compact summaries. Warning: typed/raw strings may be logged.

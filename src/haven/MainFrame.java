@@ -27,9 +27,6 @@
 package haven;
 
 
-import paisti.plugin.BuiltinPlugins;
-import paisti.plugin.PluginManager;
-
 import java.awt.*;
 import java.awt.event.*;
 import java.io.*;
@@ -466,8 +463,6 @@ public class MainFrame extends java.awt.Frame implements Console.Directory {
 	    return;
 	}
 	setupres();
-	PluginManager plugins = PluginManager.install(BuiltinPlugins.plugins());
-	plugins.dispatchClientStart();
 	UI.Runner fun = null;
 	if(Bootstrap.replay.get() != null) {
 	    try {
@@ -476,7 +471,6 @@ public class MainFrame extends java.awt.Frame implements Console.Directory {
 		player.start();
 	    } catch(IOException e) {
 		System.err.println("hafen: " + e.getMessage());
-		plugins.dispatchClientShutdown();
 		System.exit(1);
 	    }
 	} else if(Bootstrap.servargs.get() != null) {
@@ -484,7 +478,6 @@ public class MainFrame extends java.awt.Frame implements Console.Directory {
 		fun = new RemoteUI(connect(Bootstrap.servargs.get()));
 	    } catch(ConnectionError e) {
 		System.err.println("hafen: " + e.getMessage());
-		plugins.dispatchClientShutdown();
 		System.exit(1);
 	    }
 	}
@@ -492,11 +485,7 @@ public class MainFrame extends java.awt.Frame implements Console.Directory {
 	status("visible");
 	if(initfullscreen.get())
 	    f.setfs();
-	try {
-	    f.run(fun);
-	} finally {
-	    plugins.dispatchClientShutdown();
-	}
+	f.run(fun);
 	resdump();
 	status("exit");
 	System.exit(0);

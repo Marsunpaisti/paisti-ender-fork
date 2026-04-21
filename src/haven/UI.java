@@ -48,7 +48,6 @@ import haven.render.Environment;
 import haven.render.Render;
 import paisti.hooks.EventBus;
 import paisti.hooks.events.BeforeOutgoingWidgetMessage;
-import paisti.plugin.PluginManager;
 import paisti.pluginv2.PluginService;
 
 public class UI {
@@ -535,9 +534,8 @@ public class UI {
 		if(pwdg == null)
 		    throw(new UIException(String.format("Null parent widget %d for %d (%s)", parent, id, wdg), null, pargs));
 		pwdg.addchild(wdg, pargs);
-		WindowDetector.process(wdg, pwdg);
-	    }
-	    PluginManager.get().dispatchWidgetAdded(UI.this, wdg, pwdg);
+	    WindowDetector.process(wdg, pwdg);
+	}
 	}
 
 	public String toString() {
@@ -728,12 +726,6 @@ public class UI {
 	if(id < 0) {
 	    new Warning("wdgmsg sender (%s) is not in rwidgets, message is %s", sender.getClass().getName(), msg).issue();
 	    return;
-	}
-	try {
-	    PluginManager.get().dispatchOutgoingWidgetMessage(this, sender, id, msg, args);
-	} catch(RuntimeException e) {
-	    System.err.println("[plugin-runtime] outgoing widget message dispatch failed: " + e);
-	    e.printStackTrace(System.err);
 	}
 	eventBus().post(new BeforeOutgoingWidgetMessage(this, sender, id, msg, args));
 	if(rcvr != null)

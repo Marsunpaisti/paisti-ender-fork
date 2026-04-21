@@ -10,9 +10,10 @@ import java.awt.*;
 
 @PluginDescription(
     name = "Developer tools",
+    configName = "devtools",
     description = "Allows the option of enabling various developer tools",
-    enabledByDefault = true,
-    hidden = true
+    enabledByDefault = false,
+    hidden = false
 )
 public class DevToolsPlugin extends PaistiPlugin {
     EventBus.Subscriber outgoingWidgetMessageSubscriber;

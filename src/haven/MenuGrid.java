@@ -35,8 +35,7 @@ import me.ender.CustomPaginaAction;
 import me.ender.GobInfoOpts;
 import me.ender.GobInfoOpts.InfoPart;
 import me.ender.minimap.Minesweeper;
-import paisti.plugin.PluginAction;
-import paisti.plugin.PluginManager;
+
 
 import javax.swing.*;
 import java.awt.*;
@@ -496,7 +495,6 @@ public class MenuGrid extends Widget implements KeyBinding.Bindable {
     public MenuGrid() {
 	super(bgsz.mul(gsz).add(1, 1));
 	initCustomPaginae();
-	initPluginPaginae();
     }
 
     private void updlayout() {
@@ -922,19 +920,7 @@ public class MenuGrid extends Widget implements KeyBinding.Bindable {
 	makeLocal("paginae/add/equip/spear", Action.EQUIP_SPEAR);
     }
 
-    private void initPluginPaginae() {
-	PluginManager manager = PluginManager.get();
-	for(PluginAction action : manager.actions()) {
-	    try {
-		makeLocal(action.resourcePath(), (ctx, iact) -> manager.perform(action, ctx, iact),
-		    action.hasToggleState() ? () -> manager.toggleState(action).orElse(false) : null);
-	    } catch(RuntimeException e) {
-		System.err.println("[plugin] failed to load action resource: " + action.resourcePath());
-		e.printStackTrace(System.err);
-	    }
-	}
-    }
-    
+
     private void makeLocal(String path, CustomPaginaAction action, Supplier<Boolean> toggleState) {
 	Resource.Named res = Resource.local().loadwait(path).indir();
 	Pagina pagina = new CustomPagina(this, res, action, toggleState);
