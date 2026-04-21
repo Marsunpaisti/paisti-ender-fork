@@ -44,6 +44,7 @@ public interface GLPanel extends UIPanel, UI.Context {
 	public final GLPanel p;
 	public final CPUProfile uprof = new CPUProfile(300), rprof = new CPUProfile(300);
 	public final GPUProfile gprof = new GPUProfile(300);
+	private final PaistiServices paistiServices = new PaistiServices();
 	protected boolean bgmode = false;
 	protected int fps, framelag;
 	protected volatile int frameno;
@@ -59,6 +60,18 @@ public interface GLPanel extends UIPanel, UI.Context {
 	    ed.register((java.awt.Component)p);
 	    updateForceHWCursor(CFG.FORCE_HW_CURSOR);
 	    CFG.FORCE_HW_CURSOR.observe(this::updateForceHWCursor);
+	}
+
+	protected UI makeui(UI.Runner fun, PaistiServices services) {
+	    return(new UI(p, new Coord(p.getSize()), fun, services));
+	}
+
+	protected void shutdownServices() {
+	    paistiServices.stop();
+	}
+
+	protected void startSharedServices() {
+	    paistiServices.start();
 	}
 
 	private double framedur() {
@@ -449,9 +462,16 @@ public interface GLPanel extends UIPanel, UI.Context {
 		    prevframe = curframe;
 		}
 	    } finally {
+		UI lastui = this.ui;
 		synchronized(uilock) {
 		    lockedui = null;
 		    uilock.notifyAll();
+		}
+		shutdownServices();
+		if(lastui != null) {
+		    synchronized(lastui) {
+			lastui.destroy();
+		    }
 		}
 		if(buf != null)
 		    buf.dispose();
@@ -459,14 +479,14 @@ public interface GLPanel extends UIPanel, UI.Context {
 	}
 
 	public UI newui(UI.Runner fun) {
-	    UI prevui, newui = new UI(p, new Coord(p.getSize()), fun);
+	    UI prevui, newui = makeui(fun, paistiServices);
+	    boolean interrupted = false;
 	    newui.env = p.env();
 	    if(p.getParent() instanceof Console.Directory)
 		newui.cons.add((Console.Directory)p.getParent());
 	    if(p instanceof Console.Directory)
 		newui.cons.add((Console.Directory)p);
 	    newui.cons.add(this);
-	    newui.startServices();
 	    synchronized(uilock) {
 		prevui = this.ui;
 		ui = newui;
@@ -477,15 +497,21 @@ public interface GLPanel extends UIPanel, UI.Context {
 		    try {
 			uilock.wait();
 		    } catch(InterruptedException e) {
-			Thread.currentThread().interrupt();
-			break;
+			interrupted = true;
 		    }
 		}
+		paistiServices.bindUi(newui);
+		startSharedServices();
 	    }
-	    if(prevui != null) {
-		synchronized(prevui) {
-		    prevui.destroy();
+	    try {
+		if(prevui != null) {
+		    synchronized(prevui) {
+			prevui.destroy();
+		    }
 		}
+	    } finally {
+		if(interrupted)
+		    Thread.currentThread().interrupt();
 	    }
 	    return(newui);
 	}

@@ -44,7 +44,11 @@ public class RootWidget extends ConsoleHost implements UI.Notice.Handler, Widget
 	super(ui, new Coord(0, 0), sz);
 	setfocusctl(true);
 	hasfocus = true;
-	effects = new GobEffects(ui);
+	effects = createEffects(ui);
+    }
+
+    protected GobEffects createEffects(UI ui) {
+	return new GobEffects(ui);
     }
 
     public boolean getcurs(CursorQuery ev) {

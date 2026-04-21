@@ -232,9 +232,19 @@ public class UI {
     }
 
     public UI(Context uictx, Coord sz, Runner fun) {
+	this(uictx, sz, fun, new PaistiServices(), true);
+    }
+
+    public UI(Context uictx, Coord sz, Runner fun, PaistiServices paistiServices) {
+	this(uictx, sz, fun, paistiServices, false);
+    }
+
+    private UI(Context uictx, Coord sz, Runner fun, PaistiServices paistiServices, boolean bindSelf) {
 	this.uictx = uictx;
-	this.paistiServices = new PaistiServices(this);
-	root = new RootWidget(this, sz);
+	this.paistiServices = paistiServices;
+	if(bindSelf)
+	    this.paistiServices.bindUi(this);
+	root = createRoot(sz);
 	widgets.put(0, root);
 	rwidgets.put(root, 0);
 	if(fun != null)
@@ -247,9 +257,9 @@ public class UI {
 	}
     }
 
-	public void startServices() {
-	    paistiServices.start();
-	}
+    protected RootWidget createRoot(Coord sz) {
+	return new RootWidget(this, sz);
+    }
 
 	public PaistiServices services() {
 	    return paistiServices;
@@ -1039,7 +1049,7 @@ public class UI {
     }
 
     public void destroy() {
-	paistiServices.stop();
+	paistiServices.clearUi(this);
 	root.destroy();
 	audio.clear();
     }

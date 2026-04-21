@@ -4,19 +4,27 @@ import paisti.hooks.EventBus;
 import paisti.pluginv2.PluginService;
 
 public class PaistiServices {
-    private final UI ui;
+    private volatile UI ui;
     private final EventBus eventBus;
     private final PluginService pluginService;
     private boolean started;
 
-    public PaistiServices(UI ui) {
-	this.ui = ui;
+    public PaistiServices() {
 	this.eventBus = new EventBus();
 	this.pluginService = new PluginService(this);
     }
 
     public UI ui() {
 	return ui;
+    }
+
+    public void bindUi(UI ui) {
+	this.ui = ui;
+    }
+
+    public void clearUi(UI ui) {
+	if(this.ui == ui)
+	    this.ui = null;
     }
 
     public EventBus eventBus() {
@@ -27,7 +35,7 @@ public class PaistiServices {
 	return pluginService;
     }
 
-    public void start() {
+    public synchronized void start() {
 	if(started)
 	    return;
 	started = true;
@@ -35,7 +43,7 @@ public class PaistiServices {
 	pluginService.syncActivePlugins();
     }
 
-    public void stop() {
+    public synchronized void stop() {
 	if(!started)
 	    return;
 	started = false;
