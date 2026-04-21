@@ -69,7 +69,7 @@ public class OverlayManager {
     public List<ScreenOverlay> screenOverlays() {
         List<ScreenOverlay> result = new ArrayList<>();
         for(RegisteredOverlay registered : sorted()) {
-            if((registered.overlay instanceof ScreenOverlay) && !registered.disabled && registered.overlay.enabled()) {
+            if((registered.overlay instanceof ScreenOverlay) && !registered.disabled && enabledForEnumeration(registered)) {
                 result.add((ScreenOverlay) registered.overlay);
             }
         }
@@ -79,7 +79,7 @@ public class OverlayManager {
     public List<MapOverlay> mapOverlays() {
         List<MapOverlay> result = new ArrayList<>();
         for(RegisteredOverlay registered : sorted()) {
-            if((registered.overlay instanceof MapOverlay) && !registered.disabled && registered.overlay.enabled()) {
+            if((registered.overlay instanceof MapOverlay) && !registered.disabled && enabledForEnumeration(registered)) {
                 result.add((MapOverlay) registered.overlay);
             }
         }
@@ -213,6 +213,16 @@ public class OverlayManager {
             }
         }
         disposeQuietly(removed);
+    }
+
+    private boolean enabledForEnumeration(RegisteredOverlay registered) {
+        try {
+            return registered.overlay.enabled();
+        } catch(Loading l) {
+            return false;
+        } catch(Throwable t) {
+            return false;
+        }
     }
 
     private GameUI currentGui() {

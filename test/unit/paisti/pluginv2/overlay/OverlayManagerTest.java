@@ -216,6 +216,21 @@ class OverlayManagerTest {
 
     @Test
     @Tag("unit")
+    void screenOverlaysEnumerationSkipsOverlayWhoseEnabledThrows() {
+        OverlayManager manager = new OverlayManager(new PaistiServices());
+        TestPlugin owner = new TestPlugin(new PaistiServices());
+        ThrowingEnabledScreenOverlay broken = new ThrowingEnabledScreenOverlay();
+        TrackingScreenOverlay healthy = new TrackingScreenOverlay("healthy", 0);
+
+        manager.register(owner, broken);
+        manager.register(owner, healthy);
+
+        assertEquals(List.of(healthy), manager.screenOverlays(), "expected screen overlay enumeration to skip overlays whose enabled() throws");
+        assertEquals(0, broken.disposeCalls, "expected screen overlay enumeration not to permanently disable a throwing enabled() overlay");
+    }
+
+    @Test
+    @Tag("unit")
     void screenOverlayLoadingIsTreatedAsTransientAndDoesNotDisableOverlay() {
         OverlayManager manager = new OverlayManager(new PaistiServices());
         TestPlugin owner = new TestPlugin(new PaistiServices());
@@ -400,6 +415,21 @@ class OverlayManagerTest {
 
     @Test
     @Tag("unit")
+    void mapOverlaysEnumerationSkipsOverlayWhoseEnabledThrows() {
+        OverlayManager manager = new OverlayManager(new PaistiServices());
+        TestPlugin owner = new TestPlugin(new PaistiServices());
+        ThrowingEnabledMapOverlay broken = new ThrowingEnabledMapOverlay();
+        TrackingMapOverlay healthy = new TrackingMapOverlay("healthy", 0, null, true);
+
+        manager.register(owner, broken);
+        manager.register(owner, healthy);
+
+        assertEquals(List.of(healthy), manager.mapOverlays(), "expected map overlay enumeration to skip overlays whose enabled() throws");
+        assertEquals(0, broken.disposeCalls, "expected map overlay enumeration not to permanently disable a throwing enabled() overlay");
+    }
+
+    @Test
+    @Tag("unit")
     void mapOverlayBridgeImplementsExpectedRenderInterfaces() throws Exception {
         Class<?> type = Class.forName("paisti.pluginv2.overlay.MapOverlayBridge");
 
@@ -505,6 +535,30 @@ class OverlayManagerTest {
         assertNull(attachedMap(manager), "expected UI.clearGUI(...) to detach the active map bridge when the UI no longer exposes a map");
         assertNull(mapSlot(manager), "expected UI.clearGUI(...) to clear the active map slot immediately");
         assertTrue(slot.removed, "expected UI.clearGUI(...) to remove the stale bridge slot immediately");
+    }
+
+    @Test
+    @Tag("unit")
+    void startReattachesMapBridgeWhenUiRemainsBoundAfterStop() throws Exception {
+        PaistiServices services = new PaistiServices();
+        OverlayManager manager = services.overlayManager();
+        UI ui = fakeUi(services);
+        TestMapView map = allocate(TestMapView.class);
+
+        setRootMap(ui, map);
+        services.bindUi(ui);
+        services.start();
+
+        TestRenderTreeSlot firstSlot = map.lastSlot;
+        services.stop();
+
+        assertNull(attachedMap(manager), "expected stop() to clear the active map attachment");
+        assertTrue(firstSlot.removed, "expected stop() to remove the active map slot");
+
+        services.start();
+
+        assertSame(map, attachedMap(manager), "expected start() to reattach the bound UI map after stop()");
+        assertEquals(2, map.drawaddCalls, "expected restart to attach the map bridge again");
     }
 
     private static class TrackingScreenOverlay implements ScreenOverlay {

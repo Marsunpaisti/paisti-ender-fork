@@ -49,6 +49,7 @@ public class PaistiServices {
 	if(started)
 	    return;
 	started = true;
+	overlayManager.syncMapOverlayAttachment();
 	pluginService.loadBuiltInPlugins();
 	pluginService.syncActivePlugins();
     }
