@@ -3,6 +3,10 @@
 <project name="hafen" default="deftgt" xmlns:if="ant:if">
   <property file="build.properties" />
   <property name="ext-lib-base" value="http://www.havenandhearth.com/java" />
+  <property name="test-unit-src" value="test/unit" />
+  <property name="test-support-src" value="test/support" />
+  <property name="test-classes" value="build/test-classes" />
+  <property name="test-reports" value="build/test-reports" />
 
   <target name="build-env">
     <mkdir dir="build" />
@@ -80,6 +84,33 @@
     <extlib name="steamworks" path="lib/ext/steamworks" url="${ext-lib-base}/steamworks/current" />
   </target>
 
+  <path id="hafen-client.classpath">
+    <pathelement path="lib/ext/jogl/jogl-all.jar" />
+    <pathelement path="lib/ext/jogl/gluegen-rt.jar" />
+    <pathelement path="lib/ext/lwjgl/lwjgl-fat.jar" />
+    <pathelement path="lib/ext/lwjgl/lwjgl-awt.jar" />
+    <pathelement path="lib/ext/lwjgl/lwjgl-opengl-fat.jar" />
+    <pathelement path="lib/ext/steamworks/steamworks4j.jar" />
+    <pathelement path="lib/jglob.jar" />
+    <pathelement path="lib/gson-2.8.6.jar" />
+    <pathelement path="lib/rxjava-1.1.5.jar" />
+    <pathelement path="lib/guava-33.2.1-jre.jar" />
+    <pathelement path="lib/failureaccess-1.0.2.jar" />
+    <pathelement path="lib/jsr305-3.0.2.jar" />
+  </path>
+
+  <path id="junit5.classpath">
+    <fileset dir="lib/test/junit5">
+      <include name="*.jar" />
+    </fileset>
+  </path>
+
+  <path id="test.classpath">
+    <path refid="hafen-client.classpath" />
+    <path refid="junit5.classpath" />
+    <pathelement path="build/classes" />
+  </path>
+
 
   <target name="hafen-client" depends="build-env, extlib/jogl, extlib/lwjgl-gl, extlib/steamworks">
     <condition property="explicit-annotations">
@@ -88,20 +119,7 @@
     <javac srcdir="src" destdir="build/classes" debug="on" encoding="UTF-8"
 	   source="11" target="11" release="11" includeantruntime="no"
 	   bootclasspath="${boot-classpath}">
-      <classpath>
-	<pathelement path="lib/ext/jogl/jogl-all.jar" />
-	<pathelement path="lib/ext/jogl/gluegen-rt.jar" />
-	<pathelement path="lib/ext/lwjgl/lwjgl-fat.jar" />
-	<pathelement path="lib/ext/lwjgl/lwjgl-awt.jar" />
-	<pathelement path="lib/ext/lwjgl/lwjgl-opengl-fat.jar" />
-	<pathelement path="lib/ext/steamworks/steamworks4j.jar" />
-	<pathelement path="lib/jglob.jar" />
-	<pathelement path="lib/gson-2.8.6.jar" />
-        <pathelement path="lib/rxjava-1.1.5.jar" />
-	<pathelement path="lib/guava-33.2.1-jre.jar" />
-	<pathelement path="lib/failureaccess-1.0.2.jar" />
-	<pathelement path="lib/jsr305-3.0.2.jar" />
-      </classpath>
+      <classpath refid="hafen-client.classpath" />
       <compilerarg if:set="explicit-annotations" value="-proc:full" />
       <compilerarg value="-Xlint:unchecked" />
       <compilerarg value="-Xlint:deprecation" />
@@ -240,6 +258,48 @@
     <copy file="etc/ansgar-config.properties" tofile="bin/haven-config.properties" />
     <chmod file="bin/hafen.jar" perm="a+x" />
   </target>
+
+  <target name="build-test-env" depends="build-env">
+    <delete dir="${test-classes}" />
+    <delete dir="${test-reports}" />
+    <mkdir dir="${test-unit-src}" />
+    <mkdir dir="${test-support-src}" />
+    <mkdir dir="${test-classes}" />
+    <mkdir dir="${test-reports}" />
+  </target>
+
+  <target name="compile-test" depends="hafen-client, build-test-env">
+    <javac destdir="${test-classes}" debug="on" encoding="UTF-8"
+           source="11" target="11" release="11" includeantruntime="no">
+      <src path="${test-unit-src}" />
+      <src path="${test-support-src}" />
+      <classpath refid="test.classpath" />
+      <compilerarg value="-Xlint:unchecked" />
+      <compilerarg value="-Xlint:-options" />
+    </javac>
+    <copy todir="${test-classes}">
+      <fileset dir="${test-unit-src}" excludes="**/*.java" />
+      <fileset dir="${test-support-src}" excludes="**/*.java" />
+    </copy>
+  </target>
+
+  <target name="test-unit" depends="compile-test">
+    <junitlauncher printSummary="true" haltOnFailure="true">
+      <classpath>
+        <path refid="test.classpath" />
+        <pathelement path="${test-classes}" />
+      </classpath>
+      <testclasses outputdir="${test-reports}">
+        <fileset dir="${test-classes}">
+          <include name="**/*Test.class" />
+        </fileset>
+        <listener type="legacy-plain" sendSysOut="true" />
+        <listener type="legacy-xml" sendSysOut="true" sendSysErr="true" />
+      </testclasses>
+    </junitlauncher>
+  </target>
+
+  <target name="test" depends="test-unit" />
   
   <target name="deftgt" depends="res-jar, jars, bin" />
   <target name="buildprocess" depends="jars"/>
@@ -271,6 +331,8 @@
   <target name="clean-code">
     <delete dir="build/classes" />
     <delete dir="build/classes-lib" />
+    <delete dir="${test-classes}" />
+    <delete dir="${test-reports}" />
     <delete file="build/hafen.jar" />
   </target>
 
