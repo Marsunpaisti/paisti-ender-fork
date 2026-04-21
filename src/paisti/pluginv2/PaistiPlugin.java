@@ -3,6 +3,7 @@ package paisti.pluginv2;
 import haven.PaistiServices;
 import haven.UI;
 import paisti.hooks.EventBus;
+import paisti.pluginv2.overlay.OverlayManager;
 
 public abstract class PaistiPlugin {
     protected final PaistiServices services;
@@ -28,6 +29,10 @@ public abstract class PaistiPlugin {
 
     protected PluginService pluginService() {
 	return services().pluginService();
+    }
+
+    protected OverlayManager overlayManager() {
+	return services().overlayManager();
     }
 
     public String getName()

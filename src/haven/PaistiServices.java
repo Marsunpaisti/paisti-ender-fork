@@ -2,16 +2,19 @@ package haven;
 
 import paisti.hooks.EventBus;
 import paisti.pluginv2.PluginService;
+import paisti.pluginv2.overlay.OverlayManager;
 
 public class PaistiServices {
     private volatile UI ui;
     private final EventBus eventBus;
     private final PluginService pluginService;
+    private final OverlayManager overlayManager;
     private boolean started;
 
     public PaistiServices() {
 	this.eventBus = new EventBus();
 	this.pluginService = new PluginService(this);
+	this.overlayManager = new OverlayManager(this);
     }
 
     public UI ui() {
@@ -33,6 +36,10 @@ public class PaistiServices {
 
     public PluginService pluginService() {
 	return pluginService;
+    }
+
+    public OverlayManager overlayManager() {
+	return overlayManager;
     }
 
     public synchronized void start() {
