@@ -14,6 +14,8 @@ import haven.Text;
 import haven.Tex;
 import haven.TexI;
 import haven.UI;
+
+import java.util.concurrent.locks.Lock;
 import paisti.pluginv2.overlay.ScreenOverlay;
 import paisti.pluginv2.overlay.ScreenOverlayContext;
 
@@ -132,11 +134,20 @@ public class DevToolsPlayerCoordsOverlay implements ScreenOverlay {
             if(mmap == null || mmap.file == null) {
                 return "Seg: n/a";
             }
-            MapFile.GridInfo info = mmap.file.gridinfo.get(grid.id);
-            if(info == null) {
-                return "Seg: unknown";
+            MapFile mapFile = mmap.file;
+            Lock readLock = mapFile.lock.readLock();
+            if(!readLock.tryLock()) {
+                return "Seg: ...";
             }
-            return String.format("Seg: %s", Long.toHexString(info.seg));
+            try {
+                MapFile.GridInfo info = mapFile.gridinfo.get(grid.id);
+                if(info == null) {
+                    return "Seg: unknown";
+                }
+                return String.format("Seg: %s", Long.toHexString(info.seg));
+            } finally {
+                readLock.unlock();
+            }
         } catch(Loading l) {
             return "Seg: loading...";
         }
