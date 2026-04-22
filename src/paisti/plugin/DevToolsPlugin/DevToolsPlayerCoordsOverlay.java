@@ -1,4 +1,4 @@
-package paisti.pluginv2.DevToolsPlugin;
+package paisti.plugin.DevToolsPlugin;
 
 import haven.Coord;
 import haven.Coord2d;
@@ -16,8 +16,8 @@ import haven.TexI;
 import haven.UI;
 
 import java.util.concurrent.locks.Lock;
-import paisti.pluginv2.overlay.ScreenOverlay;
-import paisti.pluginv2.overlay.ScreenOverlayContext;
+import paisti.plugin.overlay.ScreenOverlay;
+import paisti.plugin.overlay.ScreenOverlayContext;
 
 import java.awt.Color;
 import java.awt.Font;

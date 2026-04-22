@@ -4,7 +4,7 @@
 
 **Goal:** Add a plugin-owned overlay system for `PaistiPlugin` with both screen overlays and map-aware overlays, plus a small `DevToolsPlugin` example that proves both render lanes work.
 
-**Architecture:** Add a `paisti.pluginv2.overlay` package containing the overlay contracts, thin render contexts, a central `OverlayManager`, and a manager-owned `MapOverlayBridge`. The manager lives in the shared `PaistiServices` container, not in one `UI`, so overlay registrations survive UI swaps while rendering and map attachment follow the currently bound UI via `services.ui()`. Logic is covered by Ant-driven JUnit tests under `test/unit`, while final visual behavior is verified manually in the running client.
+**Architecture:** Add a `paisti.plugin.overlay` package containing the overlay contracts, thin render contexts, a central `OverlayManager`, and a manager-owned `MapOverlayBridge`. The manager lives in the shared `PaistiServices` container, not in one `UI`, so overlay registrations survive UI swaps while rendering and map attachment follow the currently bound UI via `services.ui()`. Logic is covered by Ant-driven JUnit tests under `test/unit`, while final visual behavior is verified manually in the running client.
 
 **Tech Stack:** Java 11, Ant (`build.xml`), Haven `UI`, `MapView`, `PView.Render2D`, `RenderTree`, `Rendered`, shared `PaistiServices`, JUnit 5 under `test/unit` and `test/support`
 
@@ -83,12 +83,12 @@
 Create `test/unit/paisti/pluginv2/overlay/OverlayManagerTest.java`.
 
 ```java
-package paisti.pluginv2.overlay;
+package paisti.plugin.overlay;
 
 import haven.PaistiServices;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import paisti.pluginv2.PaistiPlugin;
+import paisti.plugin.PaistiPlugin;
 
 import java.lang.reflect.Method;
 
@@ -99,28 +99,28 @@ class OverlayManagerTest {
     @Test
     @Tag("unit")
     void overlayApiExists() throws Exception {
-        assertNotNull(Class.forName("paisti.pluginv2.overlay.PluginOverlay"));
-        assertNotNull(Class.forName("paisti.pluginv2.overlay.ScreenOverlay"));
-        assertNotNull(Class.forName("paisti.pluginv2.overlay.MapOverlay"));
-        assertNotNull(Class.forName("paisti.pluginv2.overlay.OverlayRegistration"));
-        assertNotNull(Class.forName("paisti.pluginv2.overlay.ScreenOverlayContext"));
-        assertNotNull(Class.forName("paisti.pluginv2.overlay.MapWorldOverlayContext"));
-        assertNotNull(Class.forName("paisti.pluginv2.overlay.MapScreenOverlayContext"));
-        assertNotNull(Class.forName("paisti.pluginv2.overlay.OverlayManager"));
+	assertNotNull(Class.forName("paisti.plugin.overlay.PluginOverlay"));
+	assertNotNull(Class.forName("paisti.plugin.overlay.ScreenOverlay"));
+	assertNotNull(Class.forName("paisti.plugin.overlay.MapOverlay"));
+	assertNotNull(Class.forName("paisti.plugin.overlay.OverlayRegistration"));
+	assertNotNull(Class.forName("paisti.plugin.overlay.ScreenOverlayContext"));
+	assertNotNull(Class.forName("paisti.plugin.overlay.MapWorldOverlayContext"));
+	assertNotNull(Class.forName("paisti.plugin.overlay.MapScreenOverlayContext"));
+	assertNotNull(Class.forName("paisti.plugin.overlay.OverlayManager"));
     }
 
     @Test
     @Tag("unit")
     void servicesExposeOverlayManager() throws Exception {
-        Method method = PaistiServices.class.getMethod("overlayManager");
-        assertEquals("paisti.pluginv2.overlay.OverlayManager", method.getReturnType().getName());
+	Method method = PaistiServices.class.getMethod("overlayManager");
+	assertEquals("paisti.plugin.overlay.OverlayManager", method.getReturnType().getName());
     }
 
     @Test
     @Tag("unit")
     void pluginBaseExposesOverlayManagerAccessor() throws Exception {
-        Method method = PaistiPlugin.class.getDeclaredMethod("overlayManager");
-        assertEquals("paisti.pluginv2.overlay.OverlayManager", method.getReturnType().getName());
+	Method method = PaistiPlugin.class.getDeclaredMethod("overlayManager");
+	assertEquals("paisti.plugin.overlay.OverlayManager", method.getReturnType().getName());
     }
 }
 ```
@@ -140,19 +140,19 @@ Expected: `OverlayManagerTest.overlayApiExists()` fails with `ClassNotFoundExcep
 Create `src/paisti/pluginv2/overlay/PluginOverlay.java`.
 
 ```java
-package paisti.pluginv2.overlay;
+package paisti.plugin.overlay;
 
 public interface PluginOverlay {
     default String id() {
-        return getClass().getName();
+	return getClass().getName();
     }
 
     default int priority() {
-        return 0;
+	return 0;
     }
 
     default boolean enabled() {
-        return true;
+	return true;
     }
 
     default void dispose() {
@@ -163,7 +163,7 @@ public interface PluginOverlay {
 Create `src/paisti/pluginv2/overlay/ScreenOverlay.java`.
 
 ```java
-package paisti.pluginv2.overlay;
+package paisti.plugin.overlay;
 
 public interface ScreenOverlay extends PluginOverlay {
     void render(ScreenOverlayContext ctx);
@@ -173,7 +173,7 @@ public interface ScreenOverlay extends PluginOverlay {
 Create `src/paisti/pluginv2/overlay/MapOverlay.java`.
 
 ```java
-package paisti.pluginv2.overlay;
+package paisti.plugin.overlay;
 
 public interface MapOverlay extends PluginOverlay {
     default void renderWorld(MapWorldOverlayContext ctx) {
@@ -187,24 +187,24 @@ public interface MapOverlay extends PluginOverlay {
 Create `src/paisti/pluginv2/overlay/OverlayRegistration.java`.
 
 ```java
-package paisti.pluginv2.overlay;
+package paisti.plugin.overlay;
 
 public final class OverlayRegistration implements AutoCloseable {
     private final OverlayManager manager;
     private final PluginOverlay overlay;
 
     OverlayRegistration(OverlayManager manager, PluginOverlay overlay) {
-        this.manager = manager;
-        this.overlay = overlay;
+	this.manager = manager;
+	this.overlay = overlay;
     }
 
     public PluginOverlay overlay() {
-        return overlay;
+	return overlay;
     }
 
     @Override
     public void close() {
-        manager.unregister(overlay);
+	manager.unregister(overlay);
     }
 }
 ```
@@ -212,7 +212,7 @@ public final class OverlayRegistration implements AutoCloseable {
 Create `src/paisti/pluginv2/overlay/ScreenOverlayContext.java`.
 
 ```java
-package paisti.pluginv2.overlay;
+package paisti.plugin.overlay;
 
 import haven.Coord;
 import haven.GOut;
@@ -223,21 +223,24 @@ public final class ScreenOverlayContext {
     private final GOut g;
 
     public ScreenOverlayContext(UI ui, GOut g) {
-        this.ui = ui;
-        this.g = g;
+	this.ui = ui;
+	this.g = g;
     }
 
-    public UI ui() { return ui; }
-    public GOut g() { return g; }
-    public Coord mouse() { return (ui == null) ? Coord.z : ui.mc; }
-    public Coord size() { return (g == null) ? Coord.z : g.sz(); }
+    public UI ui() {return ui;}
+
+    public GOut g() {return g;}
+
+    public Coord mouse() {return (ui == null) ? Coord.z : ui.mc;}
+
+    public Coord size() {return (g == null) ? Coord.z : g.sz();}
 }
 ```
 
 Create `src/paisti/pluginv2/overlay/MapWorldOverlayContext.java`.
 
 ```java
-package paisti.pluginv2.overlay;
+package paisti.plugin.overlay;
 
 import haven.GameUI;
 import haven.MapView;
@@ -253,25 +256,29 @@ public final class MapWorldOverlayContext {
     private final Render out;
 
     public MapWorldOverlayContext(UI ui, GameUI gui, MapView map, Pipe state, Render out) {
-        this.ui = ui;
-        this.gui = gui;
-        this.map = map;
-        this.state = state;
-        this.out = out;
+	this.ui = ui;
+	this.gui = gui;
+	this.map = map;
+	this.state = state;
+	this.out = out;
     }
 
-    public UI ui() { return ui; }
-    public GameUI gui() { return gui; }
-    public MapView map() { return map; }
-    public Pipe state() { return state; }
-    public Render out() { return out; }
+    public UI ui() {return ui;}
+
+    public GameUI gui() {return gui;}
+
+    public MapView map() {return map;}
+
+    public Pipe state() {return state;}
+
+    public Render out() {return out;}
 }
 ```
 
 Create `src/paisti/pluginv2/overlay/MapScreenOverlayContext.java`.
 
 ```java
-package paisti.pluginv2.overlay;
+package paisti.plugin.overlay;
 
 import haven.Coord;
 import haven.Coord3f;
@@ -289,24 +296,28 @@ public final class MapScreenOverlayContext {
     private final Pipe state;
 
     public MapScreenOverlayContext(UI ui, GameUI gui, MapView map, GOut g, Pipe state) {
-        this.ui = ui;
-        this.gui = gui;
-        this.map = map;
-        this.g = g;
-        this.state = state;
+	this.ui = ui;
+	this.gui = gui;
+	this.map = map;
+	this.g = g;
+	this.state = state;
     }
 
-    public UI ui() { return ui; }
-    public GameUI gui() { return gui; }
-    public MapView map() { return map; }
-    public GOut g() { return g; }
-    public Pipe state() { return state; }
+    public UI ui() {return ui;}
+
+    public GameUI gui() {return gui;}
+
+    public MapView map() {return map;}
+
+    public GOut g() {return g;}
+
+    public Pipe state() {return state;}
 
     public Coord worldToScreen(Coord3f world) {
-        if(map == null || world == null) {
-            return null;
-        }
-        return map.screenxf(world).round2();
+	if(map == null || world == null) {
+	    return null;
+	}
+	return map.screenxf(world).round2();
     }
 }
 ```
@@ -316,10 +327,10 @@ public final class MapScreenOverlayContext {
 Create `src/paisti/pluginv2/overlay/OverlayManager.java`.
 
 ```java
-package paisti.pluginv2.overlay;
+package paisti.plugin.overlay;
 
 import haven.PaistiServices;
-import paisti.pluginv2.PaistiPlugin;
+import paisti.plugin.PaistiPlugin;
 
 import java.util.Collection;
 import java.util.Collections;
@@ -328,11 +339,11 @@ public class OverlayManager {
     private final PaistiServices services;
 
     public OverlayManager(PaistiServices services) {
-        this.services = services;
+	this.services = services;
     }
 
     public OverlayRegistration register(PaistiPlugin owner, PluginOverlay overlay) {
-        return new OverlayRegistration(this, overlay);
+	return new OverlayRegistration(this, overlay);
     }
 
     public void unregister(PluginOverlay overlay) {
@@ -342,11 +353,11 @@ public class OverlayManager {
     }
 
     public Collection<ScreenOverlay> screenOverlays() {
-        return Collections.emptyList();
+	return Collections.emptyList();
     }
 
     public Collection<MapOverlay> mapOverlays() {
-        return Collections.emptyList();
+	return Collections.emptyList();
     }
 }
 ```
@@ -357,8 +368,8 @@ Update `src/haven/PaistiServices.java`.
 package haven;
 
 import paisti.hooks.EventBus;
-import paisti.pluginv2.PluginService;
-import paisti.pluginv2.overlay.OverlayManager;
+import paisti.plugin.PluginService;
+import paisti.plugin.overlay.OverlayManager;
 
 public class PaistiServices {
     private volatile UI ui;
@@ -368,13 +379,13 @@ public class PaistiServices {
     private boolean started;
 
     public PaistiServices() {
-        this.eventBus = new EventBus();
-        this.pluginService = new PluginService(this);
-        this.overlayManager = new OverlayManager(this);
+	this.eventBus = new EventBus();
+	this.pluginService = new PluginService(this);
+	this.overlayManager = new OverlayManager(this);
     }
 
     public OverlayManager overlayManager() {
-        return overlayManager;
+	return overlayManager;
     }
 }
 ```
@@ -382,16 +393,13 @@ public class PaistiServices {
 Update `src/paisti/pluginv2/PaistiPlugin.java`.
 
 ```java
-package paisti.pluginv2;
+package paisti.plugin;
 
-import haven.PaistiServices;
-import haven.UI;
-import paisti.hooks.EventBus;
-import paisti.pluginv2.overlay.OverlayManager;
+import paisti.plugin.overlay.OverlayManager;
 
 public abstract class PaistiPlugin {
     protected OverlayManager overlayManager() {
-        return services().overlayManager();
+	return services().overlayManager();
     }
 }
 ```
@@ -424,13 +432,13 @@ git commit -m "feat: add plugin overlay api"
 Update `test/unit/paisti/pluginv2/overlay/OverlayManagerTest.java`.
 
 ```java
-package paisti.pluginv2.overlay;
+package paisti.plugin.overlay;
 
 import haven.GOut;
 import haven.PaistiServices;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import paisti.pluginv2.PaistiPlugin;
+import paisti.plugin.PaistiPlugin;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -443,113 +451,113 @@ class OverlayManagerTest {
     @Test
     @Tag("unit")
     void unregisterAllDisposesOwnerOverlays() {
-        PaistiServices services = new PaistiServices();
-        OverlayManager manager = new OverlayManager(services);
-        TestPlugin owner = new TestPlugin(services);
-        TrackingScreenOverlay overlay = new TrackingScreenOverlay("owner", 0);
+	PaistiServices services = new PaistiServices();
+	OverlayManager manager = new OverlayManager(services);
+	TestPlugin owner = new TestPlugin(services);
+	TrackingScreenOverlay overlay = new TrackingScreenOverlay("owner", 0);
 
-        manager.register(owner, overlay);
-        manager.unregisterAll(owner);
+	manager.register(owner, overlay);
+	manager.unregisterAll(owner);
 
-        assertTrue(overlay.disposed);
-        assertTrue(manager.screenOverlays().isEmpty());
+	assertTrue(overlay.disposed);
+	assertTrue(manager.screenOverlays().isEmpty());
     }
 
     @Test
     @Tag("unit")
     void screenOverlaysRenderInPriorityThenRegistrationOrder() {
-        PaistiServices services = new PaistiServices();
-        OverlayManager manager = new OverlayManager(services);
-        TestPlugin owner = new TestPlugin(services);
-        List<String> trace = new ArrayList<>();
+	PaistiServices services = new PaistiServices();
+	OverlayManager manager = new OverlayManager(services);
+	TestPlugin owner = new TestPlugin(services);
+	List<String> trace = new ArrayList<>();
 
-        manager.register(owner, new TrackingScreenOverlay("late", 10, trace));
-        manager.register(owner, new TrackingScreenOverlay("early-a", 0, trace));
-        manager.register(owner, new TrackingScreenOverlay("early-b", 0, trace));
+	manager.register(owner, new TrackingScreenOverlay("late", 10, trace));
+	manager.register(owner, new TrackingScreenOverlay("early-a", 0, trace));
+	manager.register(owner, new TrackingScreenOverlay("early-b", 0, trace));
 
-        manager.renderScreenOverlays((GOut) null);
+	manager.renderScreenOverlays((GOut) null);
 
-        assertEquals(Arrays.asList("early-a", "early-b", "late"), trace);
+	assertEquals(Arrays.asList("early-a", "early-b", "late"), trace);
     }
 
     @Test
     @Tag("unit")
     void repeatedScreenFailuresDisableOnlyTheBrokenOverlay() {
-        PaistiServices services = new PaistiServices();
-        OverlayManager manager = new OverlayManager(services);
-        TestPlugin owner = new TestPlugin(services);
-        TrackingScreenOverlay healthy = new TrackingScreenOverlay("healthy", 0);
-        ThrowingScreenOverlay broken = new ThrowingScreenOverlay();
+	PaistiServices services = new PaistiServices();
+	OverlayManager manager = new OverlayManager(services);
+	TestPlugin owner = new TestPlugin(services);
+	TrackingScreenOverlay healthy = new TrackingScreenOverlay("healthy", 0);
+	ThrowingScreenOverlay broken = new ThrowingScreenOverlay();
 
-        manager.register(owner, broken);
-        manager.register(owner, healthy);
+	manager.register(owner, broken);
+	manager.register(owner, healthy);
 
-        for(int i = 0; i < 6; i++) {
-            manager.renderScreenOverlays((GOut) null);
-        }
+	for (int i = 0; i < 6; i++) {
+	    manager.renderScreenOverlays((GOut) null);
+	}
 
-        assertEquals(6, healthy.renders);
-        assertEquals(5, broken.renders);
+	assertEquals(6, healthy.renders);
+	assertEquals(5, broken.renders);
     }
 
     private static final class TestPlugin extends PaistiPlugin {
-        private TestPlugin(PaistiServices services) {
-            super(services);
-        }
+	private TestPlugin(PaistiServices services) {
+	    super(services);
+	}
 
-        @Override
-        public String getName() {
-            return "OverlayManagerTestPlugin";
-        }
+	@Override
+	public String getName() {
+	    return "OverlayManagerTestPlugin";
+	}
 
-        public void startUp() {
-        }
+	public void startUp() {
+	}
 
-        public void shutDown() {
-        }
+	public void shutDown() {
+	}
     }
 
     private static class TrackingScreenOverlay implements ScreenOverlay {
-        private final String name;
-        private final int priority;
-        private final List<String> trace;
-        private boolean disposed;
-        private int renders;
+	private final String name;
+	private final int priority;
+	private final List<String> trace;
+	private boolean disposed;
+	private int renders;
 
-        private TrackingScreenOverlay(String name, int priority) {
-            this(name, priority, null);
-        }
+	private TrackingScreenOverlay(String name, int priority) {
+	    this(name, priority, null);
+	}
 
-        private TrackingScreenOverlay(String name, int priority, List<String> trace) {
-            this.name = name;
-            this.priority = priority;
-            this.trace = trace;
-        }
+	private TrackingScreenOverlay(String name, int priority, List<String> trace) {
+	    this.name = name;
+	    this.priority = priority;
+	    this.trace = trace;
+	}
 
-        public int priority() { return priority; }
+	public int priority() {return priority;}
 
-        public void render(ScreenOverlayContext ctx) {
-            renders++;
-            if(trace != null) {
-                trace.add(name);
-            }
-        }
+	public void render(ScreenOverlayContext ctx) {
+	    renders++;
+	    if(trace != null) {
+		trace.add(name);
+	    }
+	}
 
-        public void dispose() {
-            disposed = true;
-        }
+	public void dispose() {
+	    disposed = true;
+	}
     }
 
     private static final class ThrowingScreenOverlay extends TrackingScreenOverlay {
-        private ThrowingScreenOverlay() {
-            super("broken", 0);
-        }
+	private ThrowingScreenOverlay() {
+	    super("broken", 0);
+	}
 
-        @Override
-        public void render(ScreenOverlayContext ctx) {
-            renders++;
-            throw new RuntimeException("boom");
-        }
+	@Override
+	public void render(ScreenOverlayContext ctx) {
+	    renders++;
+	    throw new RuntimeException("boom");
+	}
     }
 }
 ```
@@ -569,11 +577,11 @@ Expected: `OverlayManagerTest` fails because registration, owner cleanup, orderi
 Update `src/paisti/pluginv2/overlay/OverlayManager.java`.
 
 ```java
-package paisti.pluginv2.overlay;
+package paisti.plugin.overlay;
 
 import haven.GOut;
 import haven.PaistiServices;
-import paisti.pluginv2.PaistiPlugin;
+import paisti.plugin.PaistiPlugin;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -589,118 +597,118 @@ public class OverlayManager {
     private long nextOrder = 0;
 
     public OverlayManager(PaistiServices services) {
-        this.services = services;
+	this.services = services;
     }
 
     public OverlayRegistration register(PaistiPlugin owner, PluginOverlay overlay) {
-        if(owner == null || overlay == null) {
-            throw new IllegalArgumentException("overlay owner and overlay must not be null");
-        }
-        overlays.add(new RegisteredOverlay(owner, overlay, nextOrder++));
-        return new OverlayRegistration(this, overlay);
+	if(owner == null || overlay == null) {
+	    throw new IllegalArgumentException("overlay owner and overlay must not be null");
+	}
+	overlays.add(new RegisteredOverlay(owner, overlay, nextOrder++));
+	return new OverlayRegistration(this, overlay);
     }
 
     public void unregister(PluginOverlay overlay) {
-        for(RegisteredOverlay registered : overlays) {
-            if(registered.overlay == overlay) {
-                overlays.remove(registered);
-                disposeQuietly(registered);
-            }
-        }
+	for (RegisteredOverlay registered : overlays) {
+	    if(registered.overlay == overlay) {
+		overlays.remove(registered);
+		disposeQuietly(registered);
+	    }
+	}
     }
 
     public void unregisterAll(PaistiPlugin owner) {
-        for(RegisteredOverlay registered : overlays) {
-            if(registered.owner == owner) {
-                overlays.remove(registered);
-                disposeQuietly(registered);
-            }
-        }
+	for (RegisteredOverlay registered : overlays) {
+	    if(registered.owner == owner) {
+		overlays.remove(registered);
+		disposeQuietly(registered);
+	    }
+	}
     }
 
     public Collection<ScreenOverlay> screenOverlays() {
-        List<ScreenOverlay> result = new ArrayList<>();
-        for(RegisteredOverlay registered : sorted()) {
-            if((registered.overlay instanceof ScreenOverlay) && !registered.disabled) {
-                result.add((ScreenOverlay) registered.overlay);
-            }
-        }
-        return result;
+	List<ScreenOverlay> result = new ArrayList<>();
+	for (RegisteredOverlay registered : sorted()) {
+	    if((registered.overlay instanceof ScreenOverlay) && !registered.disabled) {
+		result.add((ScreenOverlay) registered.overlay);
+	    }
+	}
+	return result;
     }
 
     public Collection<MapOverlay> mapOverlays() {
-        List<MapOverlay> result = new ArrayList<>();
-        for(RegisteredOverlay registered : sorted()) {
-            if((registered.overlay instanceof MapOverlay) && !registered.disabled) {
-                result.add((MapOverlay) registered.overlay);
-            }
-        }
-        return result;
+	List<MapOverlay> result = new ArrayList<>();
+	for (RegisteredOverlay registered : sorted()) {
+	    if((registered.overlay instanceof MapOverlay) && !registered.disabled) {
+		result.add((MapOverlay) registered.overlay);
+	    }
+	}
+	return result;
     }
 
     public void renderScreenOverlays(GOut g) {
-        ScreenOverlayContext ctx = new ScreenOverlayContext(services.ui(), g);
-        for(RegisteredOverlay registered : sorted()) {
-            if(!(registered.overlay instanceof ScreenOverlay)) {
-                continue;
-            }
-            if(registered.disabled || !registered.overlay.enabled()) {
-                continue;
-            }
-            try {
-                ((ScreenOverlay) registered.overlay).render(ctx);
-                registered.failures = 0;
-            } catch(Throwable t) {
-                handleFailure(registered, t);
-            }
-        }
+	ScreenOverlayContext ctx = new ScreenOverlayContext(services.ui(), g);
+	for (RegisteredOverlay registered : sorted()) {
+	    if(!(registered.overlay instanceof ScreenOverlay)) {
+		continue;
+	    }
+	    if(registered.disabled || !registered.overlay.enabled()) {
+		continue;
+	    }
+	    try {
+		((ScreenOverlay) registered.overlay).render(ctx);
+		registered.failures = 0;
+	    } catch (Throwable t) {
+		handleFailure(registered, t);
+	    }
+	}
     }
 
     public void stop() {
-        for(RegisteredOverlay registered : overlays) {
-            overlays.remove(registered);
-            disposeQuietly(registered);
-        }
+	for (RegisteredOverlay registered : overlays) {
+	    overlays.remove(registered);
+	    disposeQuietly(registered);
+	}
     }
 
     private List<RegisteredOverlay> sorted() {
-        List<RegisteredOverlay> ordered = new ArrayList<>(overlays);
-        ordered.sort(Comparator.comparingInt((RegisteredOverlay registered) -> registered.overlay.priority())
-            .thenComparingLong(registered -> registered.order));
-        return ordered;
+	List<RegisteredOverlay> ordered = new ArrayList<>(overlays);
+	ordered.sort(Comparator.comparingInt((RegisteredOverlay registered) -> registered.overlay.priority())
+	    .thenComparingLong(registered -> registered.order));
+	return ordered;
     }
 
     private void handleFailure(RegisteredOverlay registered, Throwable t) {
-        registered.failures++;
-        System.err.println("Overlay failure in plugin " + registered.owner.getName() + " overlay " + registered.overlay.id());
-        t.printStackTrace(System.err);
-        if(registered.failures >= MAX_CONSECUTIVE_FAILURES) {
-            registered.disabled = true;
-            System.err.println("Overlay disabled after repeated failures: " + registered.overlay.id());
-        }
+	registered.failures++;
+	System.err.println("Overlay failure in plugin " + registered.owner.getName() + " overlay " + registered.overlay.id());
+	t.printStackTrace(System.err);
+	if(registered.failures >= MAX_CONSECUTIVE_FAILURES) {
+	    registered.disabled = true;
+	    System.err.println("Overlay disabled after repeated failures: " + registered.overlay.id());
+	}
     }
 
     private void disposeQuietly(RegisteredOverlay registered) {
-        try {
-            registered.overlay.dispose();
-        } catch(Throwable t) {
-            System.err.println("Overlay dispose failure in plugin " + registered.owner.getName() + " overlay " + registered.overlay.id());
-            t.printStackTrace(System.err);
-        }
+	try {
+	    registered.overlay.dispose();
+	} catch (Throwable t) {
+	    System.err.println("Overlay dispose failure in plugin " + registered.owner.getName() + " overlay " + registered.overlay.id());
+	    t.printStackTrace(System.err);
+	}
     }
 
     private static final class RegisteredOverlay {
-        private final PaistiPlugin owner;
-        private final PluginOverlay overlay;
-        private final long order;
-        private int failures;
-        private boolean disabled;
+	private final PaistiPlugin owner;
+	private final PluginOverlay overlay;
+	private final long order;
+	private int failures;
+	private boolean disabled;
 
-        private RegisteredOverlay(PaistiPlugin owner, PluginOverlay overlay, long order) {
-            this.owner = owner;
-            this.overlay = overlay;
-            this.order = order;
-        }
+	private RegisteredOverlay(PaistiPlugin owner, PluginOverlay overlay, long order) {
+	    this.owner = owner;
+	    this.overlay = overlay;
+	    this.order = order;
+	}
     }
 }
 ```
@@ -738,9 +746,9 @@ package haven;
 
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import paisti.pluginv2.PaistiPlugin;
-import paisti.pluginv2.overlay.ScreenOverlay;
-import paisti.pluginv2.overlay.ScreenOverlayContext;
+import paisti.plugin.PaistiPlugin;
+import paisti.plugin.overlay.ScreenOverlay;
+import paisti.plugin.overlay.ScreenOverlayContext;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -749,47 +757,49 @@ class PaistiServicesLifetimeTest {
     @Test
     @Tag("unit")
     void stopDisposesRegisteredOverlays() {
-        PaistiServices services = new PaistiServices();
-        TestPlugin plugin = new TestPlugin(services);
-        TrackingOverlay overlay = new TrackingOverlay();
+	PaistiServices services = new PaistiServices();
+	TestPlugin plugin = new TestPlugin(services);
+	TrackingOverlay overlay = new TrackingOverlay();
 
-        services.overlayManager().register(plugin, overlay);
-        services.start();
-        services.stop();
+	services.overlayManager().register(plugin, overlay);
+	services.start();
+	services.stop();
 
-        assertTrue(overlay.disposed);
-        assertTrue(services.overlayManager().screenOverlays().isEmpty());
+	assertTrue(overlay.disposed);
+	assertTrue(services.overlayManager().screenOverlays().isEmpty());
     }
 
     @Test
     @Tag("unit")
     void uiSwapDoesNotClearOverlayRegistrationsWhileServicesStayStarted() {
-        PaistiServices services = new PaistiServices();
-        TestPlugin plugin = new TestPlugin(services);
-        TrackingOverlay overlay = new TrackingOverlay();
+	PaistiServices services = new PaistiServices();
+	TestPlugin plugin = new TestPlugin(services);
+	TrackingOverlay overlay = new TrackingOverlay();
 
-        services.overlayManager().register(plugin, overlay);
-        services.bindUi(allocate(UI.class));
-        services.start();
-        services.bindUi(allocate(UI.class));
+	services.overlayManager().register(plugin, overlay);
+	services.bindUi(allocate(UI.class));
+	services.start();
+	services.bindUi(allocate(UI.class));
 
-        assertFalse(services.overlayManager().screenOverlays().isEmpty());
+	assertFalse(services.overlayManager().screenOverlays().isEmpty());
     }
 
     private static final class TestPlugin extends PaistiPlugin {
-        private TestPlugin(PaistiServices services) { super(services); }
-        public void startUp() { }
-        public void shutDown() { }
+	private TestPlugin(PaistiServices services) {super(services);}
+
+	public void startUp() {}
+
+	public void shutDown() {}
     }
 
     private static final class TrackingOverlay implements ScreenOverlay {
-        private boolean disposed;
+	private boolean disposed;
 
-        public void render(ScreenOverlayContext ctx) { }
+	public void render(ScreenOverlayContext ctx) {}
 
-        public void dispose() {
-            disposed = true;
-        }
+	public void dispose() {
+	    disposed = true;
+	}
     }
 }
 ```
@@ -889,7 +899,7 @@ void mapOverlaysRenderInPriorityThenRegistrationOrder() {
 @Test
 @Tag("unit")
 void mapOverlayBridgeImplementsExpectedRenderInterfaces() throws Exception {
-    Class<?> type = Class.forName("paisti.pluginv2.overlay.MapOverlayBridge");
+    Class<?> type = Class.forName("paisti.plugin.overlay.MapOverlayBridge");
     assertTrue(RenderTree.Node.class.isAssignableFrom(type));
     assertTrue(Rendered.class.isAssignableFrom(type));
     assertTrue(PView.Render2D.class.isAssignableFrom(type));
@@ -901,19 +911,19 @@ private static final class TrackingMapOverlay implements MapOverlay {
     private final List<String> trace;
 
     private TrackingMapOverlay(String name, int priority, List<String> trace) {
-        this.name = name;
-        this.priority = priority;
-        this.trace = trace;
+	this.name = name;
+	this.priority = priority;
+	this.trace = trace;
     }
 
-    public int priority() { return priority; }
+    public int priority() {return priority;}
 
     public void renderWorld(MapWorldOverlayContext ctx) {
-        trace.add("world:" + name);
+	trace.add("world:" + name);
     }
 
     public void renderScreen(MapScreenOverlayContext ctx) {
-        trace.add("screen:" + name);
+	trace.add("screen:" + name);
     }
 }
 ```
@@ -933,7 +943,7 @@ Expected: the test run fails because `MapOverlayBridge` and the map dispatch met
 Create `src/paisti/pluginv2/overlay/MapOverlayBridge.java`.
 
 ```java
-package paisti.pluginv2.overlay;
+package paisti.plugin.overlay;
 
 import haven.GOut;
 import haven.PView;
@@ -946,17 +956,17 @@ final class MapOverlayBridge implements RenderTree.Node, Rendered, PView.Render2
     private final OverlayManager manager;
 
     MapOverlayBridge(OverlayManager manager) {
-        this.manager = manager;
+	this.manager = manager;
     }
 
     @Override
     public void draw(Pipe state, Render out) {
-        manager.renderMapWorldOverlays(state, out);
+	manager.renderMapWorldOverlays(state, out);
     }
 
     @Override
     public void draw(GOut g, Pipe state) {
-        manager.renderMapScreenOverlays(g, state);
+	manager.renderMapScreenOverlays(g, state);
     }
 }
 ```
@@ -964,7 +974,7 @@ final class MapOverlayBridge implements RenderTree.Node, Rendered, PView.Render2
 Update `src/paisti/pluginv2/overlay/OverlayManager.java` by adding map attachment and dispatch.
 
 ```java
-package paisti.pluginv2.overlay;
+package paisti.plugin.overlay;
 
 import haven.GOut;
 import haven.GameUI;
@@ -979,81 +989,81 @@ public class OverlayManager {
     private RenderTree.Slot mapSlot;
 
     public void renderMapWorldOverlays(Pipe state, Render out) {
-        MapView map = currentMap();
-        GameUI gui = (services.ui() == null) ? null : services.ui().gui;
-        MapWorldOverlayContext ctx = new MapWorldOverlayContext(services.ui(), gui, map, state, out);
-        for(RegisteredOverlay registered : sorted()) {
-            if((registered.overlay instanceof MapOverlay) && !registered.disabled && registered.overlay.enabled()) {
-                try {
-                    ((MapOverlay) registered.overlay).renderWorld(ctx);
-                    registered.failures = 0;
-                } catch(Throwable t) {
-                    handleFailure(registered, t);
-                }
-            }
-        }
+	MapView map = currentMap();
+	GameUI gui = (services.ui() == null) ? null : services.ui().gui;
+	MapWorldOverlayContext ctx = new MapWorldOverlayContext(services.ui(), gui, map, state, out);
+	for (RegisteredOverlay registered : sorted()) {
+	    if((registered.overlay instanceof MapOverlay) && !registered.disabled && registered.overlay.enabled()) {
+		try {
+		    ((MapOverlay) registered.overlay).renderWorld(ctx);
+		    registered.failures = 0;
+		} catch (Throwable t) {
+		    handleFailure(registered, t);
+		}
+	    }
+	}
     }
 
     public void renderMapScreenOverlays(GOut g, Pipe state) {
-        MapView map = currentMap();
-        GameUI gui = (services.ui() == null) ? null : services.ui().gui;
-        MapScreenOverlayContext ctx = new MapScreenOverlayContext(services.ui(), gui, map, g, state);
-        for(RegisteredOverlay registered : sorted()) {
-            if((registered.overlay instanceof MapOverlay) && !registered.disabled && registered.overlay.enabled()) {
-                try {
-                    ((MapOverlay) registered.overlay).renderScreen(ctx);
-                    registered.failures = 0;
-                } catch(Throwable t) {
-                    handleFailure(registered, t);
-                }
-            }
-        }
+	MapView map = currentMap();
+	GameUI gui = (services.ui() == null) ? null : services.ui().gui;
+	MapScreenOverlayContext ctx = new MapScreenOverlayContext(services.ui(), gui, map, g, state);
+	for (RegisteredOverlay registered : sorted()) {
+	    if((registered.overlay instanceof MapOverlay) && !registered.disabled && registered.overlay.enabled()) {
+		try {
+		    ((MapOverlay) registered.overlay).renderScreen(ctx);
+		    registered.failures = 0;
+		} catch (Throwable t) {
+		    handleFailure(registered, t);
+		}
+	    }
+	}
     }
 
     public void syncMapOverlayAttachment() {
-        MapView map = currentMap();
-        if(map == attachedMap) {
-            return;
-        }
-        if(mapSlot != null) {
-            mapSlot.remove();
-            mapSlot = null;
-        }
-        attachedMap = map;
-        if(attachedMap != null) {
-            mapSlot = attachedMap.drawadd(mapBridge);
-        }
+	MapView map = currentMap();
+	if(map == attachedMap) {
+	    return;
+	}
+	if(mapSlot != null) {
+	    mapSlot.remove();
+	    mapSlot = null;
+	}
+	attachedMap = map;
+	if(attachedMap != null) {
+	    mapSlot = attachedMap.drawadd(mapBridge);
+	}
     }
 
     public void renderScreenOverlays(GOut g) {
-        syncMapOverlayAttachment();
-        ScreenOverlayContext ctx = new ScreenOverlayContext(services.ui(), g);
-        for(RegisteredOverlay registered : sorted()) {
-            if((registered.overlay instanceof ScreenOverlay) && !registered.disabled && registered.overlay.enabled()) {
-                try {
-                    ((ScreenOverlay) registered.overlay).render(ctx);
-                    registered.failures = 0;
-                } catch(Throwable t) {
-                    handleFailure(registered, t);
-                }
-            }
-        }
+	syncMapOverlayAttachment();
+	ScreenOverlayContext ctx = new ScreenOverlayContext(services.ui(), g);
+	for (RegisteredOverlay registered : sorted()) {
+	    if((registered.overlay instanceof ScreenOverlay) && !registered.disabled && registered.overlay.enabled()) {
+		try {
+		    ((ScreenOverlay) registered.overlay).render(ctx);
+		    registered.failures = 0;
+		} catch (Throwable t) {
+		    handleFailure(registered, t);
+		}
+	    }
+	}
     }
 
     public void stop() {
-        if(mapSlot != null) {
-            mapSlot.remove();
-            mapSlot = null;
-        }
-        attachedMap = null;
-        for(RegisteredOverlay registered : overlays) {
-            overlays.remove(registered);
-            disposeQuietly(registered);
-        }
+	if(mapSlot != null) {
+	    mapSlot.remove();
+	    mapSlot = null;
+	}
+	attachedMap = null;
+	for (RegisteredOverlay registered : overlays) {
+	    overlays.remove(registered);
+	    disposeQuietly(registered);
+	}
     }
 
     private MapView currentMap() {
-        return (services.ui() == null || services.ui().gui == null) ? null : services.ui().gui.map;
+	return (services.ui() == null || services.ui().gui == null) ? null : services.ui().gui.map;
     }
 }
 ```
@@ -1088,14 +1098,14 @@ git commit -m "feat: add map overlay bridge"
 Create `src/paisti/pluginv2/DevToolsPlugin/DevToolsPluginScreenOverlay.java`.
 
 ```java
-package paisti.pluginv2.DevToolsPlugin;
+package paisti.plugin.DevToolsPlugin;
 
 import haven.Coord;
 import haven.Text;
 import haven.Tex;
 import haven.TexI;
-import paisti.pluginv2.overlay.ScreenOverlay;
-import paisti.pluginv2.overlay.ScreenOverlayContext;
+import paisti.plugin.overlay.ScreenOverlay;
+import paisti.plugin.overlay.ScreenOverlayContext;
 
 import java.awt.Color;
 
@@ -1104,26 +1114,26 @@ public class DevToolsPluginScreenOverlay implements ScreenOverlay {
 
     @Override
     public int priority() {
-        return 100;
+	return 100;
     }
 
     @Override
     public void render(ScreenOverlayContext ctx) {
-        if(ctx.ui() == null || !ctx.ui().modctrl || !ctx.ui().modshift) {
-            return;
-        }
-        if(label == null) {
-            label = new TexI(Text.renderstroked("DEV overlay active", Color.WHITE, Color.BLACK).img);
-        }
-        ctx.g().image(label, Coord.of(10, 10));
+	if(ctx.ui() == null || !ctx.ui().modctrl || !ctx.ui().modshift) {
+	    return;
+	}
+	if(label == null) {
+	    label = new TexI(Text.renderstroked("DEV overlay active", Color.WHITE, Color.BLACK).img);
+	}
+	ctx.g().image(label, Coord.of(10, 10));
     }
 
     @Override
     public void dispose() {
-        if(label != null) {
-            label.dispose();
-            label = null;
-        }
+	if(label != null) {
+	    label.dispose();
+	    label = null;
+	}
     }
 }
 ```
@@ -1133,7 +1143,7 @@ public class DevToolsPluginScreenOverlay implements ScreenOverlay {
 Create `src/paisti/pluginv2/DevToolsPlugin/DevToolsPluginSceneOverlay.java`.
 
 ```java
-package paisti.pluginv2.DevToolsPlugin;
+package paisti.plugin.DevToolsPlugin;
 
 import haven.Coord;
 import haven.Coord3f;
@@ -1141,43 +1151,43 @@ import haven.Gob;
 import haven.Text;
 import haven.Tex;
 import haven.TexI;
-import paisti.pluginv2.overlay.MapOverlay;
-import paisti.pluginv2.overlay.MapScreenOverlayContext;
+import paisti.plugin.overlay.MapOverlay;
+import paisti.plugin.overlay.MapScreenOverlayContext;
 
 public class DevToolsPluginSceneOverlay implements MapOverlay {
     private Tex label;
 
     @Override
     public int priority() {
-        return 100;
+	return 100;
     }
 
     @Override
     public void renderScreen(MapScreenOverlayContext ctx) {
-        if(ctx.ui() == null || ctx.map() == null || !ctx.ui().modctrl || !ctx.ui().modshift) {
-            return;
-        }
-        Gob player = ctx.map().player();
-        if(player == null) {
-            return;
-        }
-        if(label == null) {
-            label = new TexI(Text.renderstroked("DEV player", java.awt.Color.WHITE, java.awt.Color.BLACK).img);
-        }
-        Coord3f playerLabel = new Coord3f(player.getc().x, player.getc().y, player.getc().z + 30f);
-        Coord sc = ctx.worldToScreen(playerLabel);
-        if(sc == null || !sc.isect(Coord.z, ctx.g().sz())) {
-            return;
-        }
-        ctx.g().aimage(label, sc, 0.5, 1.0);
+	if(ctx.ui() == null || ctx.map() == null || !ctx.ui().modctrl || !ctx.ui().modshift) {
+	    return;
+	}
+	Gob player = ctx.map().player();
+	if(player == null) {
+	    return;
+	}
+	if(label == null) {
+	    label = new TexI(Text.renderstroked("DEV player", java.awt.Color.WHITE, java.awt.Color.BLACK).img);
+	}
+	Coord3f playerLabel = new Coord3f(player.getc().x, player.getc().y, player.getc().z + 30f);
+	Coord sc = ctx.worldToScreen(playerLabel);
+	if(sc == null || !sc.isect(Coord.z, ctx.g().sz())) {
+	    return;
+	}
+	ctx.g().aimage(label, sc, 0.5, 1.0);
     }
 
     @Override
     public void dispose() {
-        if(label != null) {
-            label.dispose();
-            label = null;
-        }
+	if(label != null) {
+	    label.dispose();
+	    label = null;
+	}
     }
 }
 ```
@@ -1187,16 +1197,12 @@ public class DevToolsPluginSceneOverlay implements MapOverlay {
 Update `src/paisti/pluginv2/DevToolsPlugin/DevToolsPlugin.java`.
 
 ```java
-package paisti.pluginv2.DevToolsPlugin;
+package paisti.plugin.DevToolsPlugin;
 
-import haven.PaistiServices;
 import paisti.hooks.EventBus;
 import paisti.hooks.events.BeforeOutgoingWidgetMessage;
-import paisti.pluginv2.PaistiPlugin;
-import paisti.pluginv2.PluginDescription;
-import paisti.pluginv2.overlay.OverlayRegistration;
-
-import java.awt.*;
+import paisti.plugin.PaistiPlugin;
+import paisti.plugin.overlay.OverlayRegistration;
 
 public class DevToolsPlugin extends PaistiPlugin {
     private final DevToolsPluginSceneOverlay sceneOverlay = new DevToolsPluginSceneOverlay();
@@ -1207,23 +1213,23 @@ public class DevToolsPlugin extends PaistiPlugin {
 
     @Override
     public void startUp() {
-        outgoingWidgetMessageSubscriber = eventBus().register(BeforeOutgoingWidgetMessage.class, this::logOutgoingWidgetMessage, 0);
-        sceneOverlayRegistration = overlayManager().register(this, sceneOverlay);
-        screenOverlayRegistration = overlayManager().register(this, screenOverlay);
+	outgoingWidgetMessageSubscriber = eventBus().register(BeforeOutgoingWidgetMessage.class, this::logOutgoingWidgetMessage, 0);
+	sceneOverlayRegistration = overlayManager().register(this, sceneOverlay);
+	screenOverlayRegistration = overlayManager().register(this, screenOverlay);
     }
 
     @Override
     public void shutDown() {
-        eventBus().unregister(outgoingWidgetMessageSubscriber);
-        if(sceneOverlayRegistration != null) {
-            sceneOverlayRegistration.close();
-            sceneOverlayRegistration = null;
-        }
-        if(screenOverlayRegistration != null) {
-            screenOverlayRegistration.close();
-            screenOverlayRegistration = null;
-        }
-        overlayManager().unregisterAll(this);
+	eventBus().unregister(outgoingWidgetMessageSubscriber);
+	if(sceneOverlayRegistration != null) {
+	    sceneOverlayRegistration.close();
+	    sceneOverlayRegistration = null;
+	}
+	if(screenOverlayRegistration != null) {
+	    screenOverlayRegistration.close();
+	    screenOverlayRegistration = null;
+	}
+	overlayManager().unregisterAll(this);
     }
 }
 ```
@@ -1279,6 +1285,6 @@ git commit -m "feat: add devtools plugin overlay examples"
 
 ### Type consistency
 
-- The plan uses one consistent overlay package: `paisti.pluginv2.overlay`.
+- The plan uses one consistent overlay package: `paisti.plugin.overlay`.
 - The manager API is consistent across tasks: `register`, `unregister`, `unregisterAll`, `renderScreenOverlays`, `renderMapWorldOverlays`, `renderMapScreenOverlays`, `syncMapOverlayAttachment`, `stop`.
 - Service lifetime assumptions match current master: `new PaistiServices()`, `services.ui()`, shared services across UI swaps.

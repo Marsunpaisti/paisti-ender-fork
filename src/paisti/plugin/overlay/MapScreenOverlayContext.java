@@ -1,4 +1,4 @@
-package paisti.pluginv2.overlay;
+package paisti.plugin.overlay;
 
 import haven.Coord;
 import haven.Coord3f;

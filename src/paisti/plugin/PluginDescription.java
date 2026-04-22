@@ -1,4 +1,4 @@
-package paisti.pluginv2;
+package paisti.plugin;
 
 import java.lang.annotation.*;
 

@@ -1,8 +1,8 @@
 package haven;
 
 import paisti.hooks.EventBus;
-import paisti.pluginv2.PluginService;
-import paisti.pluginv2.overlay.OverlayManager;
+import paisti.plugin.PluginService;
+import paisti.plugin.overlay.OverlayManager;
 
 public class PaistiServices {
     private volatile UI ui;

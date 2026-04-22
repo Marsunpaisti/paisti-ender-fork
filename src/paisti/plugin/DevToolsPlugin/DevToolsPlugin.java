@@ -1,10 +1,10 @@
-package paisti.pluginv2.DevToolsPlugin;
+package paisti.plugin.DevToolsPlugin;
 
 import haven.PaistiServices;
 import paisti.hooks.EventBus;
 import paisti.hooks.events.BeforeOutgoingWidgetMessage;
-import paisti.pluginv2.PaistiPlugin;
-import paisti.pluginv2.PluginDescription;
+import paisti.plugin.PaistiPlugin;
+import paisti.plugin.PluginDescription;
 
 import java.awt.*;
 

@@ -1,4 +1,4 @@
-package paisti.pluginv2.overlay;
+package paisti.plugin.overlay;
 
 public interface ScreenOverlay extends PluginOverlay {
     default ScreenOverlayScope scope() {

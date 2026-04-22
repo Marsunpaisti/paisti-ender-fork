@@ -1,4 +1,4 @@
-package paisti.pluginv2.DevToolsPlugin;
+package paisti.plugin.DevToolsPlugin;
 
 import haven.Coord;
 import haven.Coord3f;
@@ -6,8 +6,8 @@ import haven.Gob;
 import haven.Text;
 import haven.Tex;
 import haven.TexI;
-import paisti.pluginv2.overlay.MapOverlay;
-import paisti.pluginv2.overlay.MapScreenOverlayContext;
+import paisti.plugin.overlay.MapOverlay;
+import paisti.plugin.overlay.MapScreenOverlayContext;
 
 import java.awt.Color;
 

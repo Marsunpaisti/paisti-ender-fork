@@ -1,4 +1,4 @@
-package paisti.pluginv2.overlay;
+package paisti.plugin.overlay;
 
 import haven.PaistiServices;
 import haven.PView;
@@ -17,8 +17,8 @@ import haven.render.RenderTree;
 import haven.render.Rendered;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import paisti.pluginv2.PluginDescription;
-import paisti.pluginv2.PaistiPlugin;
+import paisti.plugin.PluginDescription;
+import paisti.plugin.PaistiPlugin;
 import sun.misc.Unsafe;
 
 import java.util.ArrayList;
@@ -59,21 +59,21 @@ class OverlayManagerTest {
     @Test
     @Tag("unit")
     void overlayApiExists() throws Exception {
-        assertNotNull(Class.forName("paisti.pluginv2.overlay.PluginOverlay"));
-        assertNotNull(Class.forName("paisti.pluginv2.overlay.ScreenOverlay"));
-        assertNotNull(Class.forName("paisti.pluginv2.overlay.MapOverlay"));
-        assertNotNull(Class.forName("paisti.pluginv2.overlay.OverlayRegistration"));
-        assertNotNull(Class.forName("paisti.pluginv2.overlay.ScreenOverlayContext"));
-        assertNotNull(Class.forName("paisti.pluginv2.overlay.MapWorldOverlayContext"));
-        assertNotNull(Class.forName("paisti.pluginv2.overlay.MapScreenOverlayContext"));
-        assertNotNull(Class.forName("paisti.pluginv2.overlay.OverlayManager"));
+        assertNotNull(Class.forName("paisti.plugin.overlay.PluginOverlay"));
+        assertNotNull(Class.forName("paisti.plugin.overlay.ScreenOverlay"));
+        assertNotNull(Class.forName("paisti.plugin.overlay.MapOverlay"));
+        assertNotNull(Class.forName("paisti.plugin.overlay.OverlayRegistration"));
+        assertNotNull(Class.forName("paisti.plugin.overlay.ScreenOverlayContext"));
+        assertNotNull(Class.forName("paisti.plugin.overlay.MapWorldOverlayContext"));
+        assertNotNull(Class.forName("paisti.plugin.overlay.MapScreenOverlayContext"));
+        assertNotNull(Class.forName("paisti.plugin.overlay.OverlayManager"));
     }
 
     @Test
     @Tag("unit")
     void servicesExposeStableSharedOverlayManager() throws Exception {
         Method method = PaistiServices.class.getMethod("overlayManager");
-        assertEquals("paisti.pluginv2.overlay.OverlayManager", method.getReturnType().getName());
+        assertEquals("paisti.plugin.overlay.OverlayManager", method.getReturnType().getName());
 
         PaistiServices services = new PaistiServices();
         OverlayManager manager = services.overlayManager();
@@ -86,7 +86,7 @@ class OverlayManagerTest {
     @Tag("unit")
     void pluginBaseDelegatesToServicesOverlayManager() throws Exception {
         Method method = PaistiPlugin.class.getDeclaredMethod("overlayManager");
-        assertEquals("paisti.pluginv2.overlay.OverlayManager", method.getReturnType().getName());
+        assertEquals("paisti.plugin.overlay.OverlayManager", method.getReturnType().getName());
 
         PaistiServices services = new PaistiServices();
         TestPlugin plugin = new TestPlugin(services);
@@ -493,7 +493,7 @@ class OverlayManagerTest {
     @Test
     @Tag("unit")
     void mapOverlayBridgeImplementsExpectedRenderInterfaces() throws Exception {
-        Class<?> type = Class.forName("paisti.pluginv2.overlay.MapOverlayBridge");
+        Class<?> type = Class.forName("paisti.plugin.overlay.MapOverlayBridge");
 
         assertTrue(RenderTree.Node.class.isAssignableFrom(type), "expected map bridge to implement RenderTree.Node");
         assertTrue(Rendered.class.isAssignableFrom(type), "expected map bridge to implement Rendered");

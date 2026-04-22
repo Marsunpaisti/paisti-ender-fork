@@ -1,4 +1,4 @@
-package paisti.pluginv2.overlay;
+package paisti.plugin.overlay;
 
 import haven.GOut;
 import haven.GameUI;
@@ -8,7 +8,7 @@ import haven.PaistiServices;
 import haven.render.Pipe;
 import haven.render.Render;
 import haven.render.RenderTree;
-import paisti.pluginv2.PaistiPlugin;
+import paisti.plugin.PaistiPlugin;
 
 import java.util.ArrayList;
 import java.util.Comparator;

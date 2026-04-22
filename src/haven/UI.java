@@ -48,7 +48,7 @@ import haven.render.Environment;
 import haven.render.Render;
 import paisti.hooks.EventBus;
 import paisti.hooks.events.BeforeOutgoingWidgetMessage;
-import paisti.pluginv2.PluginService;
+import paisti.plugin.PluginService;
 
 public class UI {
     public static int MOD_SHIFT = KeyMatch.S, MOD_CTRL = KeyMatch.C, MOD_META = KeyMatch.M, MOD_SUPER = KeyMatch.SUPER;

@@ -1,11 +1,11 @@
-package paisti.pluginv2.DevToolsPlugin;
+package paisti.plugin.DevToolsPlugin;
 
 import haven.Coord;
 import haven.Text;
 import haven.Tex;
 import haven.TexI;
-import paisti.pluginv2.overlay.ScreenOverlay;
-import paisti.pluginv2.overlay.ScreenOverlayContext;
+import paisti.plugin.overlay.ScreenOverlay;
+import paisti.plugin.overlay.ScreenOverlayContext;
 
 import java.awt.Color;
 

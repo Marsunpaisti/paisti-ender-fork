@@ -5,11 +5,11 @@ import haven.render.gl.GLEnvironment;
 import me.ender.gob.GobEffects;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import paisti.pluginv2.PluginDescription;
-import paisti.pluginv2.PaistiPlugin;
-import paisti.pluginv2.overlay.ScreenOverlay;
-import paisti.pluginv2.overlay.ScreenOverlayContext;
-import paisti.pluginv2.overlay.ScreenOverlayScope;
+import paisti.plugin.PluginDescription;
+import paisti.plugin.PaistiPlugin;
+import paisti.plugin.overlay.ScreenOverlay;
+import paisti.plugin.overlay.ScreenOverlayContext;
+import paisti.plugin.overlay.ScreenOverlayScope;
 import sun.misc.Unsafe;
 
 import java.awt.Canvas;

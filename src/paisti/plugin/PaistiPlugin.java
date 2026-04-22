@@ -1,9 +1,9 @@
-package paisti.pluginv2;
+package paisti.plugin;
 
 import haven.PaistiServices;
 import haven.UI;
 import paisti.hooks.EventBus;
-import paisti.pluginv2.overlay.OverlayManager;
+import paisti.plugin.overlay.OverlayManager;
 
 public abstract class PaistiPlugin {
     protected final PaistiServices services;

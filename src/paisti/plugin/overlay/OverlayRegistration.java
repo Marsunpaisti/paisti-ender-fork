@@ -1,4 +1,4 @@
-package paisti.pluginv2.overlay;
+package paisti.plugin.overlay;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 

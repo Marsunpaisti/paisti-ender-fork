@@ -1,4 +1,4 @@
-package paisti.pluginv2.overlay;
+package paisti.plugin.overlay;
 
 public interface MapOverlay extends PluginOverlay {
     default void renderWorld(MapWorldOverlayContext ctx) {

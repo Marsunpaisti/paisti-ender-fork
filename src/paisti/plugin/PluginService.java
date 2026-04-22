@@ -1,10 +1,10 @@
-package paisti.pluginv2;
+package paisti.plugin;
 
 import com.google.common.collect.ImmutableList;
 import haven.Config;
 import haven.PaistiServices;
 import haven.PluginConfig;
-import paisti.pluginv2.DevToolsPlugin.DevToolsPlugin;
+import paisti.plugin.DevToolsPlugin.DevToolsPlugin;
 
 import java.util.ArrayList;
 import java.util.Collection;
