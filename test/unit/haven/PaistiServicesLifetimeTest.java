@@ -9,6 +9,7 @@ import paisti.pluginv2.PluginDescription;
 import paisti.pluginv2.PaistiPlugin;
 import paisti.pluginv2.overlay.ScreenOverlay;
 import paisti.pluginv2.overlay.ScreenOverlayContext;
+import paisti.pluginv2.overlay.ScreenOverlayScope;
 import sun.misc.Unsafe;
 
 import java.awt.Canvas;
@@ -213,7 +214,7 @@ class PaistiServicesLifetimeTest {
         }
     }
 
-    private static final class TrackingScreenOverlay implements ScreenOverlay {
+    private static class TrackingScreenOverlay implements ScreenOverlay {
         private boolean disposed;
         private int renders;
         private UI lastUi;
@@ -241,6 +242,17 @@ class PaistiServicesLifetimeTest {
         @Override
         public void dispose() {
             disposed = true;
+        }
+    }
+
+    private static final class TrackingGlobalScreenOverlay extends TrackingScreenOverlay {
+        private TrackingGlobalScreenOverlay(List<String> trace) {
+            super(trace);
+        }
+
+        @Override
+        public ScreenOverlayScope scope() {
+            return ScreenOverlayScope.GLOBAL;
         }
     }
 
@@ -309,7 +321,7 @@ class PaistiServicesLifetimeTest {
         PaistiServices services = new PaistiServices();
         UI ui = fakeUi(services);
         List<String> trace = new ArrayList<>();
-        TrackingScreenOverlay overlay = new TrackingScreenOverlay(trace);
+        TrackingScreenOverlay overlay = new TrackingGlobalScreenOverlay(trace);
 
         services.bindUi(ui);
         services.overlayManager().register(new TestPlugin(services), overlay);

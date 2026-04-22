@@ -148,6 +148,7 @@ public class OverlayManager {
 
     public void renderScreenOverlays(GOut g) {
         ScreenOverlayContext ctx = new ScreenOverlayContext(services.ui(), g);
+        boolean hasActiveGameUi = (ctx.ui() != null) && (ctx.ui().gui != null);
         for(RegisteredOverlay registered : sorted()) {
             if(!(registered.overlay instanceof ScreenOverlay)) {
                 continue;
@@ -155,11 +156,15 @@ public class OverlayManager {
             if(registered.disabled) {
                 continue;
             }
+            ScreenOverlay overlay = (ScreenOverlay) registered.overlay;
+            if((overlay.scope() == ScreenOverlayScope.GAMEPLAY) && !hasActiveGameUi) {
+                continue;
+            }
             try {
                 if(!registered.overlay.enabled()) {
                     continue;
                 }
-                ((ScreenOverlay) registered.overlay).render(ctx);
+                overlay.render(ctx);
                 registered.screenFailures = 0;
             } catch(Loading l) {
             } catch(Throwable t) {

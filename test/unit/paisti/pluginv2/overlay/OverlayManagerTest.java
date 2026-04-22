@@ -7,6 +7,7 @@ import haven.Coord2d;
 import haven.ActAudio;
 import haven.Loading;
 import haven.MapView;
+import haven.GameUI;
 import haven.RootWidget;
 import haven.UI;
 import haven.render.Pipe;
@@ -26,6 +27,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.InvocationTargetException;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -115,13 +117,14 @@ class OverlayManagerTest {
     @Test
     @Tag("unit")
     void screenOverlaysRenderInPriorityThenRegistrationOrder() {
-        OverlayManager manager = new OverlayManager(new PaistiServices());
-        TestPlugin owner = new TestPlugin(new PaistiServices());
+        PaistiServices services = new PaistiServices();
+        OverlayManager manager = services.overlayManager();
+        TestPlugin owner = new TestPlugin(services);
         List<String> trace = new ArrayList<>();
 
-        manager.register(owner, new TrackingScreenOverlay("late", 10, trace));
-        manager.register(owner, new TrackingScreenOverlay("early-a", 0, trace));
-        manager.register(owner, new TrackingScreenOverlay("early-b", 0, trace));
+        manager.register(owner, new TrackingScreenOverlay("late", 10, trace, ScreenOverlayScope.GLOBAL));
+        manager.register(owner, new TrackingScreenOverlay("early-a", 0, trace, ScreenOverlayScope.GLOBAL));
+        manager.register(owner, new TrackingScreenOverlay("early-b", 0, trace, ScreenOverlayScope.GLOBAL));
 
         renderScreenOverlays(manager);
 
@@ -131,10 +134,11 @@ class OverlayManagerTest {
     @Test
     @Tag("unit")
     void repeatedScreenFailuresDisableOnlyTheBrokenOverlay() {
-        OverlayManager manager = new OverlayManager(new PaistiServices());
-        TestPlugin owner = new TestPlugin(new PaistiServices());
-        TrackingScreenOverlay healthy = new TrackingScreenOverlay("healthy", 0);
-        ThrowingScreenOverlay broken = new ThrowingScreenOverlay();
+        PaistiServices services = new PaistiServices();
+        OverlayManager manager = services.overlayManager();
+        TestPlugin owner = new TestPlugin(services);
+        TrackingScreenOverlay healthy = new TrackingScreenOverlay("healthy", 0, null, ScreenOverlayScope.GLOBAL);
+        ThrowingScreenOverlay broken = new ThrowingScreenOverlay(ScreenOverlayScope.GLOBAL);
 
         manager.register(owner, broken);
         manager.register(owner, healthy);
@@ -198,10 +202,11 @@ class OverlayManagerTest {
     @Test
     @Tag("unit")
     void screenOverlaysExcludeDisabledByEnabledFlagAndRenderingMatches() {
-        OverlayManager manager = new OverlayManager(new PaistiServices());
-        TestPlugin owner = new TestPlugin(new PaistiServices());
-        TrackingScreenOverlay healthy = new TrackingScreenOverlay("healthy", 0);
-        DisabledScreenOverlay disabled = new DisabledScreenOverlay("disabled", 0);
+        PaistiServices services = new PaistiServices();
+        OverlayManager manager = services.overlayManager();
+        TestPlugin owner = new TestPlugin(services);
+        TrackingScreenOverlay healthy = new TrackingScreenOverlay("healthy", 0, null, ScreenOverlayScope.GLOBAL);
+        DisabledScreenOverlay disabled = new DisabledScreenOverlay("disabled", 0, ScreenOverlayScope.GLOBAL);
 
         manager.register(owner, disabled);
         manager.register(owner, healthy);
@@ -232,10 +237,11 @@ class OverlayManagerTest {
     @Test
     @Tag("unit")
     void screenOverlayLoadingIsTreatedAsTransientAndDoesNotDisableOverlay() {
-        OverlayManager manager = new OverlayManager(new PaistiServices());
-        TestPlugin owner = new TestPlugin(new PaistiServices());
-        LoadingScreenOverlay loading = new LoadingScreenOverlay();
-        TrackingScreenOverlay healthy = new TrackingScreenOverlay("healthy", 0);
+        PaistiServices services = new PaistiServices();
+        OverlayManager manager = services.overlayManager();
+        TestPlugin owner = new TestPlugin(services);
+        LoadingScreenOverlay loading = new LoadingScreenOverlay(ScreenOverlayScope.GLOBAL);
+        TrackingScreenOverlay healthy = new TrackingScreenOverlay("healthy", 0, null, ScreenOverlayScope.GLOBAL);
 
         manager.register(owner, loading);
         manager.register(owner, healthy);
@@ -253,10 +259,11 @@ class OverlayManagerTest {
     @Test
     @Tag("unit")
     void throwingScreenEnabledPredicateIsIsolatedFromRenderPass() {
-        OverlayManager manager = new OverlayManager(new PaistiServices());
-        TestPlugin owner = new TestPlugin(new PaistiServices());
-        ThrowingEnabledScreenOverlay broken = new ThrowingEnabledScreenOverlay();
-        TrackingScreenOverlay healthy = new TrackingScreenOverlay("healthy", 0);
+        PaistiServices services = new PaistiServices();
+        OverlayManager manager = services.overlayManager();
+        TestPlugin owner = new TestPlugin(services);
+        ThrowingEnabledScreenOverlay broken = new ThrowingEnabledScreenOverlay(ScreenOverlayScope.GLOBAL);
+        TrackingScreenOverlay healthy = new TrackingScreenOverlay("healthy", 0, null, ScreenOverlayScope.GLOBAL);
 
         manager.register(owner, broken);
         manager.register(owner, healthy);
@@ -269,6 +276,60 @@ class OverlayManagerTest {
         assertEquals(5, broken.enabledCalls, "expected throwing enabled() overlay to be disabled after five failures");
         assertEquals(1, broken.disposeCalls, "expected throwing enabled() overlay to be disposed after repeated failures");
         assertTrue(!healthy.disposed, "expected healthy overlay to remain active when another overlay's enabled() throws");
+    }
+
+    @Test
+    @Tag("unit")
+    void defaultScreenOverlaySkipsRenderWithoutActiveGameUi() throws Exception {
+        PaistiServices services = new PaistiServices();
+        OverlayManager manager = services.overlayManager();
+        TestPlugin owner = new TestPlugin(services);
+        TrackingScreenOverlay overlay = new TrackingScreenOverlay("gameplay", 0);
+
+        services.bindUi(fakeUi(services));
+        manager.register(owner, overlay);
+
+        renderScreenOverlays(manager);
+
+        assertEquals(0, overlay.renders, "expected gameplay-scoped screen overlay not to render without an active GameUI");
+        assertEquals(0, screenFailures(manager, overlay), "expected skipped gameplay overlay not to record screen failures");
+    }
+
+    @Test
+    @Tag("unit")
+    void skippedDefaultScreenOverlayDoesNotAccumulateFailuresOrDisable() throws Exception {
+        PaistiServices services = new PaistiServices();
+        OverlayManager manager = services.overlayManager();
+        TestPlugin owner = new TestPlugin(services);
+        ThrowingScreenOverlay overlay = new ThrowingScreenOverlay();
+
+        services.bindUi(fakeUi(services));
+        manager.register(owner, overlay);
+
+        for(int i = 0; i < 6; i++) {
+            renderScreenOverlays(manager);
+        }
+
+        assertEquals(0, overlay.renders, "expected skipped gameplay overlay never to enter render() without an active GameUI");
+        assertEquals(0, overlay.disposeCalls, "expected skipped gameplay overlay not to be disabled while UI is out of game");
+        assertEquals(0, screenFailures(manager, overlay), "expected skipped gameplay overlay not to accumulate screen failures");
+        assertEquals(List.of(overlay), manager.screenOverlays(), "expected skipped gameplay overlay to remain registered for the next in-game UI");
+    }
+
+    @Test
+    @Tag("unit")
+    void globalScreenOverlayRendersWithoutActiveGameUi() throws Exception {
+        PaistiServices services = new PaistiServices();
+        OverlayManager manager = services.overlayManager();
+        TestPlugin owner = new TestPlugin(services);
+        TrackingGlobalScreenOverlay overlay = new TrackingGlobalScreenOverlay("global", 0);
+
+        services.bindUi(fakeUi(services));
+        manager.register(owner, overlay);
+
+        renderScreenOverlays(manager);
+
+        assertEquals(1, overlay.renders, "expected global screen overlay to keep rendering without an active GameUI");
     }
 
     @Test
@@ -565,22 +626,33 @@ class OverlayManagerTest {
         private final String name;
         private final int priority;
         private final List<String> trace;
+        private final ScreenOverlayScope scope;
         private boolean disposed;
         protected int renders;
 
         private TrackingScreenOverlay(String name, int priority) {
-            this(name, priority, null);
+            this(name, priority, null, ScreenOverlayScope.GAMEPLAY);
         }
 
         private TrackingScreenOverlay(String name, int priority, List<String> trace) {
+            this(name, priority, trace, ScreenOverlayScope.GAMEPLAY);
+        }
+
+        private TrackingScreenOverlay(String name, int priority, List<String> trace, ScreenOverlayScope scope) {
             this.name = name;
             this.priority = priority;
             this.trace = trace;
+            this.scope = scope;
         }
 
         @Override
         public int priority() {
             return priority;
+        }
+
+        @Override
+        public ScreenOverlayScope scope() {
+            return scope;
         }
 
         @Override
@@ -611,9 +683,19 @@ class OverlayManagerTest {
         }
     }
 
+    private static final class TrackingGlobalScreenOverlay extends TrackingScreenOverlay {
+        private TrackingGlobalScreenOverlay(String name, int priority) {
+            super(name, priority, null, ScreenOverlayScope.GLOBAL);
+        }
+    }
+
     private static final class DisabledScreenOverlay extends TrackingScreenOverlay {
         private DisabledScreenOverlay(String name, int priority) {
             super(name, priority);
+        }
+
+        private DisabledScreenOverlay(String name, int priority, ScreenOverlayScope scope) {
+            super(name, priority, null, scope);
         }
 
         @Override
@@ -627,6 +709,10 @@ class OverlayManagerTest {
 
         private LoadingScreenOverlay() {
             super("loading", 0);
+        }
+
+        private LoadingScreenOverlay(ScreenOverlayScope scope) {
+            super("loading", 0, null, scope);
         }
 
         @Override
@@ -648,6 +734,10 @@ class OverlayManagerTest {
 
         private ThrowingEnabledScreenOverlay() {
             super("enabled-broken", 0);
+        }
+
+        private ThrowingEnabledScreenOverlay(ScreenOverlayScope scope) {
+            super("enabled-broken", 0, null, scope);
         }
 
         @Override
@@ -714,6 +804,10 @@ class OverlayManagerTest {
 
         private ThrowingScreenOverlay() {
             super("broken", 0);
+        }
+
+        private ThrowingScreenOverlay(ScreenOverlayScope scope) {
+            super("broken", 0, null, scope);
         }
 
         @Override
@@ -847,6 +941,11 @@ class OverlayManagerTest {
         return getField(OverlayManager.class, manager, "attachedMap", MapView.class);
     }
 
+    private static int screenFailures(OverlayManager manager, ScreenOverlay overlay) throws Exception {
+        Object registration = registrationFor(manager, overlay);
+        return getField(registration.getClass(), registration, "screenFailures", Integer.class);
+    }
+
     private static RenderTree.Slot mapSlot(OverlayManager manager) throws Exception {
         return getField(OverlayManager.class, manager, "mapSlot", RenderTree.Slot.class);
     }
@@ -868,6 +967,17 @@ class OverlayManagerTest {
         Field field = owner.getDeclaredField(name);
         field.setAccessible(true);
         return type.cast(field.get(target));
+    }
+
+    private static Object registrationFor(OverlayManager manager, PluginOverlay overlay) throws Exception {
+        CopyOnWriteArrayList<?> registrations = getField(OverlayManager.class, manager, "overlays", CopyOnWriteArrayList.class);
+        for(Object registration : registrations) {
+            PluginOverlay registeredOverlay = getField(registration.getClass(), registration, "overlay", PluginOverlay.class);
+            if(registeredOverlay == overlay) {
+                return registration;
+            }
+        }
+        throw new AssertionError("expected overlay registration to exist for " + overlay.id());
     }
 
     private static final class TestMapView extends MapView {
