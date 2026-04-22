@@ -3,6 +3,7 @@ package paisti.pluginv2.DevToolsPlugin;
 import haven.Coord;
 import haven.Coord2d;
 import haven.Coord3f;
+import haven.GOut;
 import haven.Gob;
 import haven.Loading;
 import haven.MCache;
@@ -12,10 +13,12 @@ import haven.MiniMap;
 import haven.Text;
 import haven.Tex;
 import haven.TexI;
+import haven.UI;
 import paisti.pluginv2.overlay.ScreenOverlay;
 import paisti.pluginv2.overlay.ScreenOverlayContext;
 
 import java.awt.Color;
+import java.awt.Font;
 
 /**
  * POC screen overlay: shows the local player's world position,
@@ -23,10 +26,13 @@ import java.awt.Color;
  * corner of the screen, always visible during gameplay.
  */
 public class DevToolsPlayerCoordsOverlay implements ScreenOverlay {
-    private static final int PADDING = 10;
-    private static final int LINE_SPACING = 2;
-    private static final Color FG = Color.WHITE;
-    private static final Color BG = Color.BLACK;
+    private static final int MARGIN = UI.scale(8);
+    private static final int PAD = UI.scale(4);
+    private static final int LINE_SPACING = UI.scale(2);
+    private static final Color TEXT_COLOR = Color.WHITE;
+    private static final Color STROKE_COLOR = Color.BLACK;
+    private static final Color BG_COLOR = new Color(0, 0, 0, 160);
+    private static final Text.Foundry FND = new Text.Foundry(Text.sans.deriveFont(Font.BOLD), 12).aa(true);
 
     private String lastPosText;
     private String lastGridText;
@@ -79,12 +85,28 @@ public class DevToolsPlayerCoordsOverlay implements ScreenOverlay {
         segTex = updateTex(segTex, lastSegText, segText);
         lastSegText = segText;
 
-        // Draw right-aligned, stacked from top-right corner
+        // Compute total bounding box for the background
+        int maxW = maxWidth(posTex, gridTex, segTex);
+        int totalH = totalHeight(posTex, gridTex, segTex);
+
         Coord screenSz = ctx.size();
-        int y = PADDING;
-        y = drawLineRight(ctx, posTex, screenSz.x, y);
-        y = drawLineRight(ctx, gridTex, screenSz.x, y);
-        drawLineRight(ctx, segTex, screenSz.x, y);
+        int bgX = screenSz.x - maxW - PAD * 2 - MARGIN;
+        int bgY = MARGIN;
+        Coord bgUl = Coord.of(bgX, bgY);
+        Coord bgSz = Coord.of(maxW + PAD * 2, totalH + PAD * 2);
+
+        // Draw semi-transparent dark background
+        GOut g = ctx.g();
+        g.chcolor(BG_COLOR);
+        g.frect(bgUl, bgSz);
+        g.chcolor();
+
+        // Draw text lines right-aligned within the background
+        int contentRight = screenSz.x - MARGIN - PAD;
+        int y = bgY + PAD;
+        y = drawLineRight(g, posTex, contentRight, y);
+        y = drawLineRight(g, gridTex, contentRight, y);
+        drawLineRight(g, segTex, contentRight, y);
     }
 
     private String resolveGridInfo(ScreenOverlayContext ctx, Coord2d rc) {
@@ -127,16 +149,41 @@ public class DevToolsPlayerCoordsOverlay implements ScreenOverlay {
         if(current != null) {
             current.dispose();
         }
-        return new TexI(Text.renderstroked(newText, FG, BG).img);
+        return new TexI(FND.renderstroked(newText, TEXT_COLOR, STROKE_COLOR).img);
     }
 
-    private int drawLineRight(ScreenOverlayContext ctx, Tex tex, int screenWidth, int y) {
+    private int drawLineRight(GOut g, Tex tex, int rightEdge, int y) {
         if(tex == null) {
             return y;
         }
         Coord sz = tex.sz();
-        ctx.g().image(tex, Coord.of(screenWidth - sz.x - PADDING, y));
+        g.image(tex, Coord.of(rightEdge - sz.x, y));
         return y + sz.y + LINE_SPACING;
+    }
+
+    private int maxWidth(Tex... texes) {
+        int max = 0;
+        for(Tex t : texes) {
+            if(t != null) {
+                max = Math.max(max, t.sz().x);
+            }
+        }
+        return max;
+    }
+
+    private int totalHeight(Tex... texes) {
+        int total = 0;
+        boolean first = true;
+        for(Tex t : texes) {
+            if(t != null) {
+                if(!first) {
+                    total += LINE_SPACING;
+                }
+                total += t.sz().y;
+                first = false;
+            }
+        }
+        return total;
     }
 
     @Override
