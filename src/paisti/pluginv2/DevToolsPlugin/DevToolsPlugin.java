@@ -18,6 +18,7 @@ import java.awt.*;
 public class DevToolsPlugin extends PaistiPlugin {
     private final DevToolsPluginSceneOverlay sceneOverlay = new DevToolsPluginSceneOverlay();
     private final DevToolsPluginScreenOverlay screenOverlay = new DevToolsPluginScreenOverlay();
+    private final DevToolsPlayerCoordsOverlay coordsOverlay = new DevToolsPlayerCoordsOverlay();
     EventBus.Subscriber outgoingWidgetMessageSubscriber;
 
     private boolean debugOutgoingWidgetMessages(){
@@ -42,6 +43,7 @@ public class DevToolsPlugin extends PaistiPlugin {
 	outgoingWidgetMessageSubscriber = eventBus().register(BeforeOutgoingWidgetMessage.class, this::logOutgoingWidgetMessage, 0);
 	overlayManager().register(this, sceneOverlay);
 	overlayManager().register(this, screenOverlay);
+	overlayManager().register(this, coordsOverlay);
     }
 
     @Override
