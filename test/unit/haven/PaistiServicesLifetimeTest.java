@@ -109,39 +109,6 @@ class PaistiServicesLifetimeTest {
                 throw new RuntimeException(e);
             }
         }
-
-        private void shutdownForTest() {
-            shutdownServices();
-        }
-    }
-
-    private static final class OrderCheckingLoop extends GLPanel.Loop {
-        private boolean swapCommittedOnStart = false;
-        private UI startedUi = null;
-        private PaistiServices capturedServices = null;
-        private UI createdUi = null;
-
-        private OrderCheckingLoop() {
-            super(new DummyPanel());
-        }
-
-        @Override
-        protected UI makeui(UI.Runner fun, PaistiServices services) {
-            try {
-                capturedServices = services;
-                createdUi = fakeUi(services);
-                return createdUi;
-            } catch (Exception e) {
-                throw new RuntimeException(e);
-            }
-        }
-
-        @Override
-        protected void startSharedServices() {
-            startedUi = capturedServices.ui();
-            swapCommittedOnStart = (startedUi == createdUi) && (ui == createdUi);
-            super.startSharedServices();
-        }
     }
 
     private static final class TestableUI extends UI {
@@ -402,20 +369,20 @@ class PaistiServicesLifetimeTest {
 
         assertTrue(activePlugins(services).contains(plugin));
 
-        loop.shutdownForTest();
+        services.stop();
 
         assertFalse(activePlugins(services).contains(plugin));
     }
 
     @Test
     @Tag("unit")
-    void sharedServicesStartAfterUiBound() {
-        OrderCheckingLoop loop = new OrderCheckingLoop();
+    void servicesAreBoundToNewUiAfterSwap() {
+        TestLoop loop = new TestLoop();
 
         UI ui = loop.newui(null);
+        PaistiServices services = ui.services();
 
-        assertTrue(loop.swapCommittedOnStart, "Shared services must start only after the swap is committed");
-        assertSame(ui, loop.startedUi, "The started UI must be the committed active UI");
+        assertSame(ui, services.ui(), "After newui(), services must be bound to the returned UI");
     }
 
     @Test

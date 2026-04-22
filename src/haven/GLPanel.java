@@ -66,12 +66,19 @@ public interface GLPanel extends UIPanel, UI.Context {
 	    return(new UI(p, new Coord(p.getSize()), fun, services));
 	}
 
-	protected void shutdownServices() {
-	    paistiServices.stop();
+	private void onUiSwapped(UI newui) {
+	    paistiServices.bindUi(newui);
+	    paistiServices.start();
 	}
 
-	protected void startSharedServices() {
-	    paistiServices.start();
+	private void onLoopTeardown() {
+	    UI lastui = this.ui;
+	    paistiServices.stop();
+	    if(lastui != null) {
+		synchronized(lastui) {
+		    lastui.destroy();
+		}
+	    }
 	}
 
 	private double framedur() {
@@ -462,17 +469,11 @@ public interface GLPanel extends UIPanel, UI.Context {
 		    prevframe = curframe;
 		}
 	    } finally {
-		UI lastui = this.ui;
 		synchronized(uilock) {
 		    lockedui = null;
 		    uilock.notifyAll();
 		}
-		shutdownServices();
-		if(lastui != null) {
-		    synchronized(lastui) {
-			lastui.destroy();
-		    }
-		}
+		onLoopTeardown();
 		if(buf != null)
 		    buf.dispose();
 	    }
@@ -480,7 +481,6 @@ public interface GLPanel extends UIPanel, UI.Context {
 
 	public UI newui(UI.Runner fun) {
 	    UI prevui, newui = makeui(fun, paistiServices);
-	    boolean interrupted = false;
 	    newui.env = p.env();
 	    if(p.getParent() instanceof Console.Directory)
 		newui.cons.add((Console.Directory)p.getParent());
@@ -497,21 +497,16 @@ public interface GLPanel extends UIPanel, UI.Context {
 		    try {
 			uilock.wait();
 		    } catch(InterruptedException e) {
-			interrupted = true;
+			Thread.currentThread().interrupt();
+			break;
 		    }
 		}
-		paistiServices.bindUi(newui);
-		startSharedServices();
 	    }
-	    try {
-		if(prevui != null) {
-		    synchronized(prevui) {
-			prevui.destroy();
-		    }
+	    onUiSwapped(newui);
+	    if(prevui != null) {
+		synchronized(prevui) {
+		    prevui.destroy();
 		}
-	    } finally {
-		if(interrupted)
-		    Thread.currentThread().interrupt();
 	    }
 	    return(newui);
 	}
