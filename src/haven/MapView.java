@@ -755,7 +755,8 @@ public class MapView extends PView implements DTarget, Console.Directory {
     }
 
     public void dispose() {
-	gobs.slot.remove();
+	if(gobs.slot != null)
+	    gobs.slot.remove();
 	clmaplist.dispose();
 	clobjlist.dispose();
 	super.dispose();
