@@ -254,7 +254,11 @@ public class OverlayManager {
         RenderTree.Slot slot = mapSlot;
         mapSlot = null;
         if(slot != null) {
-            slot.remove();
+            try {
+                slot.remove();
+            } catch(RenderTree.SlotRemoved e) {
+                /* Slot's parent tree was already disposed (e.g. during logout teardown). */
+            }
         }
         attachedMap = null;
     }
