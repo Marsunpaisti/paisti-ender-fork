@@ -140,9 +140,10 @@ public class OverlayManager {
             return;
         }
         clearMapAttachment();
-        attachedMap = map;
-        if(attachedMap != null) {
-            mapSlot = attachedMap.drawadd(mapBridge);
+        if(map != null) {
+            RenderTree.Slot slot = map.drawadd(mapBridge);
+            attachedMap = map;
+            mapSlot = slot;
         }
     }
 
@@ -157,10 +158,10 @@ public class OverlayManager {
                 continue;
             }
             ScreenOverlay overlay = (ScreenOverlay) registered.overlay;
-            if((overlay.scope() == ScreenOverlayScope.GAMEPLAY) && !hasActiveGameUi) {
-                continue;
-            }
             try {
+                if((overlay.scope() == ScreenOverlayScope.GAMEPLAY) && !hasActiveGameUi) {
+                    continue;
+                }
                 if(!registered.overlay.enabled()) {
                     continue;
                 }

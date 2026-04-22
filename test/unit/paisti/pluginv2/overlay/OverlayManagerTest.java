@@ -33,6 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class OverlayManagerTest {
@@ -600,6 +601,24 @@ class OverlayManagerTest {
 
     @Test
     @Tag("unit")
+    void bindUiLeavesManagerDetachedWhenMapDrawaddThrows() throws Exception {
+        PaistiServices services = new PaistiServices();
+        OverlayManager manager = services.overlayManager();
+        UI ui = fakeUi(services);
+        ThrowingDrawaddMapView map = allocate(ThrowingDrawaddMapView.class);
+
+        setRootMap(ui, map);
+
+        RuntimeException error = assertThrows(RuntimeException.class, () -> services.bindUi(ui), "expected bindUi(...) to surface drawadd failures");
+
+        assertEquals("drawadd-boom", error.getMessage(), "expected drawadd failure to come from the map attachment attempt");
+        assertNull(attachedMap(manager), "expected failed map bridge attachment to leave the manager detached");
+        assertNull(mapSlot(manager), "expected failed map bridge attachment not to retain a slot");
+        assertEquals(1, map.drawaddCalls, "expected attachment to attempt drawadd exactly once");
+    }
+
+    @Test
+    @Tag("unit")
     void startReattachesMapBridgeWhenUiRemainsBoundAfterStop() throws Exception {
         PaistiServices services = new PaistiServices();
         OverlayManager manager = services.overlayManager();
@@ -620,6 +639,26 @@ class OverlayManagerTest {
 
         assertSame(map, attachedMap(manager), "expected start() to reattach the bound UI map after stop()");
         assertEquals(2, map.drawaddCalls, "expected restart to attach the map bridge again");
+    }
+
+    @Test
+    @Tag("unit")
+    void throwingScreenScopeIsIsolatedFromRenderPass() throws Exception {
+        PaistiServices services = new PaistiServices();
+        OverlayManager manager = services.overlayManager();
+        TestPlugin owner = new TestPlugin(services);
+        ThrowingScopeScreenOverlay broken = new ThrowingScopeScreenOverlay();
+        TrackingGlobalScreenOverlay healthy = new TrackingGlobalScreenOverlay("healthy", 0);
+
+        manager.register(owner, broken);
+        manager.register(owner, healthy);
+
+        renderScreenOverlays(manager);
+
+        assertEquals(1, broken.scopeCalls, "expected render pass to attempt scope evaluation once");
+        assertEquals(1, screenFailures(manager, broken), "expected throwing scope() to count as a screen failure");
+        assertEquals(1, healthy.renders, "expected healthy overlay to keep rendering when another overlay's scope() throws");
+        assertEquals(0, broken.disposeCalls, "expected one throwing scope() failure not to disable the overlay immediately");
     }
 
     private static class TrackingScreenOverlay implements ScreenOverlay {
@@ -744,6 +783,27 @@ class OverlayManagerTest {
         public boolean enabled() {
             enabledCalls++;
             throw new RuntimeException("enabled-boom");
+        }
+
+        @Override
+        public void dispose() {
+            disposeCalls++;
+            super.dispose();
+        }
+    }
+
+    private static final class ThrowingScopeScreenOverlay extends TrackingScreenOverlay {
+        private int scopeCalls;
+        private int disposeCalls;
+
+        private ThrowingScopeScreenOverlay() {
+            super("scope-broken", 0, null, ScreenOverlayScope.GLOBAL);
+        }
+
+        @Override
+        public ScreenOverlayScope scope() {
+            scopeCalls++;
+            throw new RuntimeException("scope-boom");
         }
 
         @Override
@@ -995,6 +1055,22 @@ class OverlayManagerTest {
             lastNode = extra;
             lastSlot = new TestRenderTreeSlot(extra);
             return lastSlot;
+        }
+    }
+
+    private static final class ThrowingDrawaddMapView extends MapView {
+        private int drawaddCalls;
+        private RenderTree.Node lastNode;
+
+        private ThrowingDrawaddMapView() {
+            super(Coord.z, null, (Coord2d) null, 0);
+        }
+
+        @Override
+        public RenderTree.Slot drawadd(RenderTree.Node extra) {
+            drawaddCalls++;
+            lastNode = extra;
+            throw new RuntimeException("drawadd-boom");
         }
     }
 
