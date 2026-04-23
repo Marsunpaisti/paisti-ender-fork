@@ -343,27 +343,21 @@ public interface GLPanel extends UIPanel, UI.Context {
 	}
 
 	/**
-	 * Poll and dispatch UI messages for all registered sessions,
-	 * then CPU-tick and issue map requests for background ones.
-	 * The visible session gets message dispatch but NOT CPU-tick
-	 * (that happens in the main loop body with GPU tick).
+	 * Poll and dispatch UI messages for background registered sessions,
+	 * then CPU-tick and issue map requests for them.
+	 * The visible session is handled separately by serviceVisibleSession().
 	 */
 	private void tickBackgroundSessions(UI visibleUi) {
 	    SessionManager mgr = SessionManager.getInstance();
 	    for(SessionContext ctx : mgr.getSessions()) {
 		UI sui = ctx.ui;
-		if(sui == null)
+		if(sui == null || sui == visibleUi)
 		    continue;
 		synchronized(sui) {
-		    /* Dispatch queued server messages for ALL registered sessions */
 		    if(ctx.session != null && ctx.remoteUI != null) {
 			PMessage msg;
 			while((msg = ctx.session.pollUIMsg()) != null) {
 			    if(msg instanceof RemoteUI.Return) {
-				/* MVP policy: session handoff via Return is not
-				 * supported for GL-loop-managed sessions.  Close
-				 * the returned session so it is not leaked, then
-				 * tear down this context. */
 				Session returned = ((RemoteUI.Return)msg).ret;
 				if(returned != null) {
 				    try { returned.close(); } catch(Exception e) { new Warning(e, "closing leaked Return session").issue(); }
@@ -380,16 +374,65 @@ public interface GLPanel extends UIPanel, UI.Context {
 			    }
 			}
 		    }
-		    /* Background-only: CPU-tick and map requests */
-		    if(sui != visibleUi) {
-			if(sui.sess != null && sui.sess.glob != null) {
-			    sui.sess.glob.ctick();
-			    sui.sess.glob.map.sendreqs();
+		    if(sui.sess != null && sui.sess.glob != null) {
+			sui.sess.glob.ctick();
+			sui.sess.glob.map.sendreqs();
+		    }
+		    sui.tick();
+		}
+	    }
+	}
+
+	/**
+	 * Service queued UI messages for the visible session if it is a
+	 * managed session.  Returns false if the visible session was
+	 * destroyed (e.g. by RemoteUI.Return) and the caller must skip
+	 * the rest of the frame.
+	 */
+	private boolean serviceVisibleSession(UI visibleUi) {
+	    SessionManager mgr = SessionManager.getInstance();
+	    SessionContext ctx = null;
+	    for(SessionContext c : mgr.getSessions()) {
+		if(c.ui == visibleUi) {
+		    ctx = c;
+		    break;
+		}
+	    }
+	    if(ctx == null || ctx.session == null || ctx.remoteUI == null)
+		return(true);
+	    synchronized(visibleUi) {
+		PMessage msg;
+		while((msg = ctx.session.pollUIMsg()) != null) {
+		    if(msg instanceof RemoteUI.Return) {
+			Session returned = ((RemoteUI.Return)msg).ret;
+			if(returned != null) {
+			    try { returned.close(); } catch(Exception e) { new Warning(e, "closing leaked Return session").issue(); }
 			}
-			sui.tick();
+			mgr.removeSession(ctx);
+			/* Switch this.ui to the next active session or leave
+			 * it for the uilock sync at the top of the next
+			 * iteration to resolve. */
+			synchronized(uilock) {
+			    SessionContext next = mgr.getActiveSession();
+			    if(next != null && next.ui != null) {
+				this.ui = next.ui;
+			    }
+			    /* If no session remains, this.ui stays as the
+			     * (now-destroyed) UI; the uilock sync or newui()
+			     * from the runner thread will replace it. */
+			}
+			return(false);
+		    }
+		    try {
+			if(!ctx.remoteUI.dispatchMessage(msg, visibleUi))
+			    break;
+		    } catch(InterruptedException e) {
+			Thread.currentThread().interrupt();
+			return(true);
 		    }
 		}
 	    }
+	    return(true);
 	}
 
 	public void run() throws InterruptedException {
@@ -444,8 +487,17 @@ public interface GLPanel extends UIPanel, UI.Context {
 		    }
 
 		    int cfno = frameno++;
-		    /* Tick background sessions: poll/dispatch UI messages & CPU-tick */
+		    /* Service background sessions */
 		    tickBackgroundSessions(ui);
+		    /* Service the visible session's message queue; if it was
+		     * destroyed (e.g. RemoteUI.Return), skip the rest of
+		     * this frame — the next iteration will pick up the
+		     * replacement UI via the uilock sync. */
+		    if(!serviceVisibleSession(ui)) {
+			env.submit(buf);
+			buf = null;
+			continue;
+		    }
 
 		    synchronized(ui) {
 			CPUProfile.phase(curf, "dsp");

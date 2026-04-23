@@ -206,21 +206,16 @@ class GLPanelLoopTest {
 
     @Test
     @Tag("unit")
-    void tickBackgroundSessionsServicesVisibleSessionMessages() throws Exception {
+    void serviceVisibleSessionHandlesNullContext() throws Exception {
         DummyPanel panel = new DummyPanel();
         TestLoop loop = new TestLoop(panel);
         TrackingUI visibleUi = (TrackingUI) loop.newui(null);
 
-        // Register as a session so tickBackgroundSessions iterates it
-        SessionManager mgr = SessionManager.getInstance();
-        mgr.addSession(new SessionContext(null, visibleUi, null));
-
-        // tickBackgroundSessions should NOT skip the visible session for message dispatch
-        // (it only skips CPU-tick for the visible one since the main loop handles that)
-        Method tick = GLPanel.Loop.class.getDeclaredMethod("tickBackgroundSessions", UI.class);
-        tick.setAccessible(true);
-        // Should not throw; visible session is iterated but background-only work is skipped
-        tick.invoke(loop, visibleUi);
+        // visibleUi is NOT registered — serviceVisibleSession should return true (no-op)
+        Method svc = GLPanel.Loop.class.getDeclaredMethod("serviceVisibleSession", UI.class);
+        svc.setAccessible(true);
+        assertTrue((boolean) svc.invoke(loop, visibleUi),
+            "serviceVisibleSession must return true when visible UI is not a managed session");
     }
 
     @Test
@@ -358,5 +353,79 @@ class GLPanelLoopTest {
         closereqField.setAccessible(true);
         assertTrue((boolean) closereqField.get(returnedSess),
             "The returned session from RemoteUI.Return must have close() called to prevent leaks");
+    }
+
+    @Test
+    @Tag("unit")
+    void visibleSessionReturnDestroysContextAndSkipsFrame() throws Exception {
+        DummyPanel panel = new DummyPanel();
+        TestLoop loop = new TestLoop(panel);
+        SessionManager mgr = SessionManager.getInstance();
+
+        // Build visible session with a Return queued
+        Session sess = newStubSession();
+        Session returnedSess = newStubSession();
+        sess.postuimsg(new RemoteUI.Return(returnedSess));
+
+        TrackingUI sessionUi = (TrackingUI) loop.newui(null);
+        sess.ui = sessionUi;
+        sessionUi.sess = sess;
+        RemoteUI remote = new RemoteUI(sess);
+        SessionContext ctx = new SessionContext(sess, sessionUi, remote);
+        mgr.addSession(ctx);
+
+        // serviceVisibleSession should return false (session destroyed)
+        Method svc = GLPanel.Loop.class.getDeclaredMethod("serviceVisibleSession", UI.class);
+        svc.setAccessible(true);
+        boolean alive = (boolean) svc.invoke(loop, sessionUi);
+
+        assertFalse(alive,
+            "serviceVisibleSession must return false when visible session hits RemoteUI.Return");
+        assertFalse(mgr.getSessions().contains(ctx),
+            "visible session context must be removed from manager after Return");
+
+        Field closereqField = Session.class.getDeclaredField("closereq");
+        closereqField.setAccessible(true);
+        assertTrue((boolean) closereqField.get(returnedSess),
+            "returned session must be closed to prevent leaks");
+    }
+
+    @Test
+    @Tag("unit")
+    void visibleSessionReturnSwitchesToNextActiveSession() throws Exception {
+        DummyPanel panel = new DummyPanel();
+        TestLoop loop = new TestLoop(panel);
+        SessionManager mgr = SessionManager.getInstance();
+
+        // Set up two sessions; first is visible, second is background
+        Session sess1 = newStubSession();
+        sess1.postuimsg(new RemoteUI.Return(newStubSession()));
+        TrackingUI ui1 = (TrackingUI) loop.newui(null);
+        sess1.ui = ui1;
+        ui1.sess = sess1;
+        RemoteUI remote1 = new RemoteUI(sess1);
+        SessionContext ctx1 = new SessionContext(sess1, ui1, remote1);
+        mgr.addSession(ctx1);
+
+        TrackingUI ui2 = new TrackingUI(panel);
+        Session sess2 = newStubSession();
+        sess2.ui = ui2;
+        ui2.sess = sess2;
+        SessionContext ctx2 = new SessionContext(sess2, ui2, new RemoteUI(sess2));
+        mgr.addSession(ctx2); // ctx2 is now active
+
+        // Force active back to ctx1 so it's the "visible" one being serviced
+        // (addSession sets active to the last added, so switch)
+        Field activeField = SessionManager.class.getDeclaredField("activeSession");
+        activeField.setAccessible(true);
+        activeField.set(mgr, ctx1);
+
+        Method svc = GLPanel.Loop.class.getDeclaredMethod("serviceVisibleSession", UI.class);
+        svc.setAccessible(true);
+        svc.invoke(loop, ui1);
+
+        // After ctx1 is removed, this.ui should switch to next active session (ctx2)
+        assertSame(ui2, loop.currentUi(),
+            "after visible session Return, loop.ui must switch to the next active session");
     }
 }
