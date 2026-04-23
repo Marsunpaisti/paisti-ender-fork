@@ -61,6 +61,25 @@ public class SessionManager {
         activeSession = sessions.get((idx + 1) % sessions.size());
     }
 
+    /**
+     * If the given context is currently the active session, advance
+     * activeSession to the next live session (excluding {@code ctx}),
+     * or null if none remains.  This prevents the GL loop's
+     * active-session sync from rebinding to a retiring context.
+     */
+    public synchronized void retireActive(SessionContext ctx) {
+        if(activeSession != ctx) {
+            return;
+        }
+        for(SessionContext other : sessions) {
+            if(other != ctx && other.isAlive()) {
+                activeSession = other;
+                return;
+            }
+        }
+        activeSession = null;
+    }
+
     public void requestAddAccount() {
         addAccountSignal.release();
     }

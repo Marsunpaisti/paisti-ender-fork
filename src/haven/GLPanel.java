@@ -421,22 +421,17 @@ public interface GLPanel extends UIPanel, UI.Context {
 			/* Initiate shutdown but do NOT remove/dispose —
 			 * pruneDeadSessions owns final teardown. */
 			ctx.close();
-			/* Switch this.ui to the next live session if one
-			 * exists, otherwise wake the login flow so the
-			 * loop doesn't keep rendering a closing session. */
+			/* Ensure activeSession no longer points at this
+			 * retiring context so the next-frame uilock sync
+			 * does not rebind to it. */
+			mgr.retireActive(ctx);
+			/* Switch this.ui to the new active session if one
+			 * exists, otherwise wake the login flow. */
 			synchronized(uilock) {
-			    boolean switched = false;
-			    for(SessionContext other : mgr.getSessions()) {
-				if(other != ctx && other.ui != null && other.isAlive()) {
-				    this.ui = other.ui;
-				    switched = true;
-				    break;
-				}
-			    }
-			    if(!switched) {
-				/* No live successor — wake the lobby/login
-				 * flow so newui() will replace this.ui on
-				 * the next runner transition. */
+			    SessionContext next = mgr.getActiveSession();
+			    if(next != null && next.ui != null) {
+				this.ui = next.ui;
+			    } else {
 				mgr.requestAddAccount();
 			    }
 			}

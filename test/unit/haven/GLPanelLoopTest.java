@@ -445,6 +445,52 @@ class GLPanelLoopTest {
         // After ctx1 hits Return, this.ui should switch to the live successor (ctx2)
         assertSame(ui2, loop.currentUi(),
             "after visible session Return, loop.ui must switch to a live successor session");
+
+        // activeSession must no longer point at the retiring ctx1
+        assertNotSame(ctx1, mgr.getActiveSession(),
+            "getActiveSession must not return the retiring context after Return");
+        assertSame(ctx2, mgr.getActiveSession(),
+            "getActiveSession must point to the live successor");
+    }
+
+    @Test
+    @Tag("unit")
+    void nextFrameUilockSyncDoesNotRebindToRetiringSession() throws Exception {
+        DummyPanel panel = new DummyPanel();
+        TestLoop loop = new TestLoop(panel);
+        SessionManager mgr = SessionManager.getInstance();
+
+        // Set up: visible session hits Return, successor exists
+        Session sess1 = newStubSession();
+        sess1.postuimsg(new RemoteUI.Return(newStubSession()));
+        TrackingUI ui1 = (TrackingUI) loop.newui(null);
+        sess1.ui = ui1;
+        ui1.sess = sess1;
+        SessionContext ctx1 = new SessionContext(sess1, ui1, new RemoteUI(sess1));
+        mgr.addSession(ctx1);
+
+        TrackingUI ui2 = new TrackingUI(panel);
+        Session sess2 = newStubSession();
+        sess2.ui = ui2;
+        ui2.sess = sess2;
+        SessionContext ctx2 = new SessionContext(sess2, ui2, new RemoteUI(sess2));
+        mgr.addSession(ctx2);
+
+        Field activeField = SessionManager.class.getDeclaredField("activeSession");
+        activeField.setAccessible(true);
+        activeField.set(mgr, ctx1);
+
+        // Trigger Return on visible session
+        Method svc = GLPanel.Loop.class.getDeclaredMethod("serviceVisibleSession", UI.class);
+        svc.setAccessible(true);
+        svc.invoke(loop, ui1);
+
+        // Now simulate the next frame's uilock sync (from run())
+        syncUi(loop, mgr);
+
+        // loop.ui must be ui2, NOT ui1 (the retiring session)
+        assertSame(ui2, loop.currentUi(),
+            "next-frame uilock sync must not rebind to the retiring session");
     }
 
     @Test
