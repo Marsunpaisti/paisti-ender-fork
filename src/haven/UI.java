@@ -1021,6 +1021,7 @@ public class UI {
     }
 
     public void destroy() {
+	removeid(root);
 	root.destroy();
 	audio.clear();
     }
