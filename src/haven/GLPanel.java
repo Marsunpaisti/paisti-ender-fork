@@ -32,6 +32,7 @@ import haven.render.gl.*;
 import java.awt.Cursor;
 import java.awt.Toolkit;
 import haven.JOGLPanel.SyncMode;
+import paisti.client.PUI;
 
 public interface GLPanel extends UIPanel, UI.Context {
     public GLEnvironment env();
@@ -44,7 +45,6 @@ public interface GLPanel extends UIPanel, UI.Context {
 	public final GLPanel p;
 	public final CPUProfile uprof = new CPUProfile(300), rprof = new CPUProfile(300);
 	public final GPUProfile gprof = new GPUProfile(300);
-	private final PaistiServices paistiServices = new PaistiServices();
 	protected boolean bgmode = false;
 	protected int fps, framelag;
 	protected volatile int frameno;
@@ -62,18 +62,12 @@ public interface GLPanel extends UIPanel, UI.Context {
 	    CFG.FORCE_HW_CURSOR.observe(this::updateForceHWCursor);
 	}
 
-	protected UI makeui(UI.Runner fun, PaistiServices services) {
-	    return(new UI(p, new Coord(p.getSize()), fun, services));
-	}
-
-	private void onUiSwapped(UI newui) {
-	    paistiServices.bindUi(newui);
-	    paistiServices.start();
+	protected UI makeui(UI.Runner fun) {
+	    return(new PUI(p, new Coord(p.getSize()), fun));
 	}
 
 	private void onLoopTeardown() {
 	    UI lastui = this.ui;
-	    paistiServices.stop();
 	    if(lastui != null) {
 		synchronized(lastui) {
 		    lastui.destroy();
@@ -480,7 +474,7 @@ public interface GLPanel extends UIPanel, UI.Context {
 	}
 
 	public UI newui(UI.Runner fun) {
-	    UI prevui, newui = makeui(fun, paistiServices);
+	    UI prevui, newui = makeui(fun);
 	    newui.env = p.env();
 	    if(p.getParent() instanceof Console.Directory)
 		newui.cons.add((Console.Directory)p.getParent());
@@ -502,7 +496,6 @@ public interface GLPanel extends UIPanel, UI.Context {
 		    }
 		}
 	    }
-	    onUiSwapped(newui);
 	    if(prevui != null) {
 		synchronized(prevui) {
 		    prevui.destroy();
