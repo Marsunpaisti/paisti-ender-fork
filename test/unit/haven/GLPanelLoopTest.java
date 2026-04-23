@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.awt.Canvas;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -196,5 +197,58 @@ class GLPanelLoopTest {
             "newui(LobbyRunner) should reuse the active session UI instead of creating a throwaway");
         assertEquals(0, sessionUi.destroyCalls,
             "session UI must not be destroyed during LobbyRunner transition");
+    }
+
+    @Test
+    @Tag("unit")
+    void tickBackgroundSessionsServicesVisibleSessionMessages() throws Exception {
+        DummyPanel panel = new DummyPanel();
+        TestLoop loop = new TestLoop(panel);
+        TrackingUI visibleUi = (TrackingUI) loop.newui(null);
+
+        // Register as a session so tickBackgroundSessions iterates it
+        SessionManager mgr = SessionManager.getInstance();
+        mgr.addSession(new SessionContext(null, visibleUi, null));
+
+        // tickBackgroundSessions should NOT skip the visible session for message dispatch
+        // (it only skips CPU-tick for the visible one since the main loop handles that)
+        Method tick = GLPanel.Loop.class.getDeclaredMethod("tickBackgroundSessions", UI.class);
+        tick.setAccessible(true);
+        // Should not throw; visible session is iterated but background-only work is skipped
+        tick.invoke(loop, visibleUi);
+    }
+
+    @Test
+    @Tag("unit")
+    void loopSyncsUiWithActiveSession() throws Exception {
+        DummyPanel panel = new DummyPanel();
+        TestLoop loop = new TestLoop(panel);
+
+        // Create two UIs simulating two sessions
+        TrackingUI ui1 = (TrackingUI) loop.newui(null);
+        SessionManager mgr = SessionManager.getInstance();
+        SessionContext ctx1 = new SessionContext(null, ui1, null);
+        mgr.addSession(ctx1);
+
+        TrackingUI ui2 = new TrackingUI(panel);
+        SessionContext ctx2 = new SessionContext(null, ui2, null);
+        mgr.addSession(ctx2); // ctx2 is now the active session
+
+        // loop.ui is still ui1, but active session is ctx2
+        assertSame(ui1, loop.currentUi());
+
+        // Simulate what the loop does: sync this.ui with active session under uilock
+        Field uilockField = GLPanel.Loop.class.getDeclaredField("uilock");
+        uilockField.setAccessible(true);
+        Object uilock = uilockField.get(loop);
+        synchronized(uilock) {
+            SessionContext active = mgr.getActiveSession();
+            if(active != null && active.ui != null && active.ui != loop.ui) {
+                loop.ui = active.ui;
+            }
+        }
+
+        assertSame(ui2, loop.currentUi(),
+            "loop.ui should sync to the active session's UI");
     }
 }

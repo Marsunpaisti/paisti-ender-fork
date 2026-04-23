@@ -343,19 +343,23 @@ public interface GLPanel extends UIPanel, UI.Context {
 	}
 
 	/**
-	 * Poll and dispatch UI messages for all registered sessions whose UI
-	 * is not the currently visible one, then CPU-tick them.
+	 * Poll and dispatch UI messages for all registered sessions,
+	 * then CPU-tick and issue map requests for background ones.
+	 * The visible session gets message dispatch but NOT CPU-tick
+	 * (that happens in the main loop body with GPU tick).
 	 */
 	private void tickBackgroundSessions(UI visibleUi) {
 	    for(SessionContext ctx : SessionManager.getInstance().getSessions()) {
 		UI sui = ctx.ui;
-		if(sui == null || sui == visibleUi)
+		if(sui == null)
 		    continue;
 		synchronized(sui) {
-		    /* Dispatch queued server messages */
+		    /* Dispatch queued server messages for ALL registered sessions */
 		    if(ctx.session != null && ctx.remoteUI != null) {
 			PMessage msg;
 			while((msg = ctx.session.pollUIMsg()) != null) {
+			    /* Conservative MVP: stop on Return messages;
+			     * they stay queued for the runner to handle. */
 			    try {
 				if(!ctx.remoteUI.dispatchMessage(msg, sui))
 				    break;
@@ -365,11 +369,14 @@ public interface GLPanel extends UIPanel, UI.Context {
 			    }
 			}
 		    }
-		    /* CPU-tick */
-		    if(sui.sess != null && sui.sess.glob != null) {
-			sui.sess.glob.ctick();
+		    /* Background-only: CPU-tick and map requests */
+		    if(sui != visibleUi) {
+			if(sui.sess != null && sui.sess.glob != null) {
+			    sui.sess.glob.ctick();
+			    sui.sess.glob.map.sendreqs();
+			}
+			sui.tick();
 		    }
-		    sui.tick();
 		}
 	    }
 	}
@@ -388,6 +395,11 @@ public interface GLPanel extends UIPanel, UI.Context {
 		    buf = env.render();
 		    UI ui;
 		    synchronized(uilock) {
+			/* Sync this.ui with the active session when applicable */
+			SessionContext active = SessionManager.getInstance().getActiveSession();
+			if(active != null && active.ui != null && active.ui != this.ui) {
+			    this.ui = active.ui;
+			}
 			this.lockedui = ui = this.ui;
 			uilock.notifyAll();
 		    }
