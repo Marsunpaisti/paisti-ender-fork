@@ -26,16 +26,10 @@ public class SessionManager {
         activeSession = ctx;
     }
 
-    public synchronized void removeSession(SessionContext ctx) {
-        if(!sessions.remove(ctx)) {
-            return;
-        }
-        ctx.close();
-        synchronized(ctx.ui) {
-            ctx.ui.destroy();
-        }
-        if(activeSession == ctx) {
-            activeSession = sessions.isEmpty() ? null : sessions.get(sessions.size() - 1);
+    public void removeSession(SessionContext ctx) {
+        SessionContext removed = removeRegisteredSession(ctx);
+        if(removed != null) {
+            removed.close();
         }
     }
 
@@ -52,7 +46,7 @@ public class SessionManager {
         return false;
     }
 
-    public SessionContext getActiveSession() {
+    public synchronized SessionContext getActiveSession() {
         return activeSession;
     }
 
@@ -76,18 +70,31 @@ public class SessionManager {
     }
 
     public synchronized void pruneDeadSessions() {
-        for(Iterator<SessionContext> it = sessions.iterator(); it.hasNext(); ) {
+        for(Iterator<SessionContext> it = sessions.iterator(); it.hasNext();) {
             SessionContext ctx = it.next();
             if(ctx.isAlive()) {
                 continue;
             }
-            synchronized(ctx.ui) {
-                ctx.ui.destroy();
+            removeRegisteredSession(it, ctx);
+        }
+    }
+
+    private synchronized SessionContext removeRegisteredSession(SessionContext ctx) {
+        Iterator<SessionContext> it = sessions.iterator();
+        while(it.hasNext()) {
+            SessionContext current = it.next();
+            if(current == ctx) {
+                removeRegisteredSession(it, current);
+                return current;
             }
-            it.remove();
-            if(activeSession == ctx) {
-                activeSession = sessions.isEmpty() ? null : sessions.get(sessions.size() - 1);
-            }
+        }
+        return null;
+    }
+
+    private void removeRegisteredSession(Iterator<SessionContext> it, SessionContext ctx) {
+        it.remove();
+        if(activeSession == ctx) {
+            activeSession = sessions.isEmpty() ? null : sessions.get(sessions.size() - 1);
         }
     }
 }

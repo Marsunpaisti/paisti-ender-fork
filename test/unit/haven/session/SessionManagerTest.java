@@ -121,6 +121,8 @@ class SessionManagerTest {
     }
 
     private static final class TestUI extends UI {
+        private int destroyCalls;
+
         private TestUI() {
             super(new DummyPanel(), Coord.of(10, 10), null);
         }
@@ -129,15 +131,22 @@ class SessionManagerTest {
         protected RootWidget createRoot(Coord sz) {
             return new TestRootWidget(this, sz);
         }
+
+        @Override
+        public void destroy() {
+            destroyCalls++;
+        }
     }
 
     private static final class SessionFixture {
         private final DummyTransport transport;
         private final SessionContext context;
+        private final TestUI ui;
 
-        private SessionFixture(DummyTransport transport, SessionContext context) {
+        private SessionFixture(DummyTransport transport, SessionContext context, TestUI ui) {
             this.transport = transport;
             this.context = context;
+            this.ui = ui;
         }
     }
 
@@ -154,10 +163,10 @@ class SessionManagerTest {
             Transport.Callback conncb = newConncb(session);
             setField(Session.class, session, "conncb", conncb);
             transport.add(conncb);
-            UI ui = new TestUI();
+            TestUI ui = new TestUI();
             session.ui = ui;
             ui.sess = session;
-            return new SessionFixture(transport, new SessionContext(session, ui, new RemoteUI(session)));
+            return new SessionFixture(transport, new SessionContext(session, ui, new RemoteUI(session)), ui);
         } catch(Exception e) {
             throw new RuntimeException(e);
         }
@@ -247,6 +256,51 @@ class SessionManagerTest {
 
         assertEquals(1, manager.getSessions().size());
         assertSame(first.context, manager.getActiveSession());
+        assertEquals(0, second.ui.destroyCalls, "manager must not destroy UI during pruning");
+
+        reset(manager);
+    }
+
+    @Test
+    @Tag("unit")
+    void removeSessionFallsBackToNewestRemainingWhenActiveRemoved() {
+        SessionManager manager = SessionManager.getInstance();
+        reset(manager);
+        SessionFixture first = newContext("first");
+        SessionFixture second = newContext("second");
+        SessionFixture third = newContext("third");
+
+        manager.addSession(first.context);
+        manager.addSession(second.context);
+        manager.addSession(third.context);
+
+        manager.removeSession(third.context);
+
+        assertEquals(2, manager.getSessions().size());
+        assertSame(second.context, manager.getActiveSession());
+        assertEquals(0, third.ui.destroyCalls, "manager must not destroy UI during direct removal");
+
+        reset(manager);
+    }
+
+    @Test
+    @Tag("unit")
+    void removeSessionKeepsActiveSessionWhenRemovingNonActiveEntry() {
+        SessionManager manager = SessionManager.getInstance();
+        reset(manager);
+        SessionFixture first = newContext("first");
+        SessionFixture second = newContext("second");
+        SessionFixture third = newContext("third");
+
+        manager.addSession(first.context);
+        manager.addSession(second.context);
+        manager.addSession(third.context);
+
+        manager.removeSession(first.context);
+
+        assertEquals(2, manager.getSessions().size());
+        assertSame(third.context, manager.getActiveSession());
+        assertEquals(0, first.ui.destroyCalls, "manager must not destroy UI when removing an inactive session");
 
         reset(manager);
     }
