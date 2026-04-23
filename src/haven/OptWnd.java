@@ -39,6 +39,7 @@ import me.ender.ui.DrinkMeter;
 import me.ender.ui.TabStrip;
 import paisti.client.PUI;
 import paisti.plugin.PaistiPlugin;
+import paisti.plugin.PluginConfig;
 import paisti.plugin.PluginDescription;
 
 import java.awt.event.KeyEvent;

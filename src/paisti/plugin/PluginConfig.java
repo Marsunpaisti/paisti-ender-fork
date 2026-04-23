@@ -1,4 +1,6 @@
-package haven;
+package paisti.plugin;
+
+import haven.CFG;
 
 public final class PluginConfig {
     private PluginConfig() {

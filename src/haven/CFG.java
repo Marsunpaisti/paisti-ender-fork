@@ -239,7 +239,7 @@ public class CFG<T> {
 	this.t = t == null ? null : t.getType();
     }
     
-    CFG(String path, T def) {
+    public CFG(String path, T def) {
 	this(path, def, null);
     }
 
