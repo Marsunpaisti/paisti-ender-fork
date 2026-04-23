@@ -8,13 +8,11 @@ import paisti.plugin.overlay.OverlayManager;
 
 public class PUI extends UI {
     private final PaistiServices paistiServices;
-    private final ScreenOverlayAfterDraw screenOverlayAfterDraw;
 
     public PUI(Context uictx, Coord sz, Runner fun) {
 	super(uictx, sz, fun);
 	this.paistiServices = new PaistiServices();
 	this.paistiServices.bindUi(this);
-	this.screenOverlayAfterDraw = new ScreenOverlayAfterDraw(paistiServices);
 	this.paistiServices.start();
     }
 
@@ -39,9 +37,9 @@ public class PUI extends UI {
     }
 
     @Override
-    public void tick() {
-	super.tick();
-	drawafter(screenOverlayAfterDraw);
+    public void draw(GOut g) {
+	super.draw(g);
+	paistiServices.overlayManager().renderScreenOverlays(g);
     }
 
     @Override

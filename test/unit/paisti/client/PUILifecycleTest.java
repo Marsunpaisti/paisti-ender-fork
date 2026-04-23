@@ -187,12 +187,10 @@ class PUILifecycleTest {
 
         pui.services().overlayManager().register(new TestPlugin(pui.services()), overlay);
 
-        // tick() registers the screenOverlayAfterDraw callback
-        pui.tick();
-        // draw() executes afterdraw callbacks which render screen overlays
+        // draw() renders screen overlays after all widget + afterdraw rendering
         pui.draw(null);
 
-        assertEquals(1, overlay.renders, "screen overlays must be rendered via the AfterDraw mechanism after tick() + draw()");
+        assertEquals(1, overlay.renders, "screen overlays must be rendered via PUI.draw() after the base UI draw pass");
         assertFalse(overlay.disposed, "rendering must not dispose the overlay");
     }
 }

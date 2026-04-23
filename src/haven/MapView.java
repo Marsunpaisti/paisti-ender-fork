@@ -51,7 +51,6 @@ import haven.rx.Reactor;
 import me.ender.ChatCommands;
 import me.ender.CustomCursors;
 import me.ender.minimap.Minesweeper;
-import paisti.client.PUI;
 import paisti.client.PMapView;
 
 public class MapView extends PView implements DTarget, Console.Directory {
@@ -698,14 +697,6 @@ public class MapView extends PView implements DTarget, Console.Directory {
 	updateSupportOverlay();
 	updateGridMat(null);
     }
-
-	@Override
-	protected void attached() {
-	    super.attached();
-	    if(ui instanceof PUI) {
-		PUI.of(ui).overlayManager().syncMapOverlayAttachment();
-	    }
-	}
      
     private void updatePlobDrawable(CFG<Boolean> cfg) {
 	if(placing != null && placing.done()) {
