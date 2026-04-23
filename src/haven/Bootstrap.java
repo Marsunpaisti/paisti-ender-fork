@@ -26,6 +26,8 @@
 
 package haven;
 
+import haven.session.SessionRunner;
+
 import java.io.*;
 import java.net.*;
 import java.util.*;
@@ -334,7 +336,7 @@ public class Bootstrap implements UI.Receiver, UI.Runner {
 	} while(true);
 	ui.destroy(1);
 	haven.error.ErrorHandler.setprop("usr", sess.user.name);
-	return(new RemoteUI(sess));
+	return(new SessionRunner(new RemoteUI(sess)));
     }
 
     public void rcvmsg(int widget, String msg, Object... args) {

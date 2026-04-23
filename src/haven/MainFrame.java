@@ -26,6 +26,8 @@
 
 package haven;
 
+import haven.session.SessionRunner;
+
 
 import java.awt.*;
 import java.awt.event.*;
@@ -475,7 +477,7 @@ public class MainFrame extends java.awt.Frame implements Console.Directory {
 	    }
 	} else if(Bootstrap.servargs.get() != null) {
 	    try {
-		fun = new RemoteUI(connect(Bootstrap.servargs.get()));
+		fun = new SessionRunner(new RemoteUI(connect(Bootstrap.servargs.get())));
 	    } catch(ConnectionError e) {
 		System.err.println("hafen: " + e.getMessage());
 		System.exit(1);
