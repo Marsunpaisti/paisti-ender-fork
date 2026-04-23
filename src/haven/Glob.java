@@ -39,6 +39,7 @@ public class Glob {
     public final MCache map;
     public final Session sess;
     public final Loader loader = new Loader();
+    public Gob.Factory gobFactory = Gob::new;
     public double gtime, sgtime, epoch = Utils.rtime();
     public Astronomy ast;
     public Party party;

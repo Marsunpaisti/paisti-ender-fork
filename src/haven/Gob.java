@@ -47,7 +47,6 @@ public class Gob implements RenderTree.Node, Sprite.Owner, Skeleton.ModOwner, Eq
     public interface Factory {
 	Gob create(Glob glob, Coord2d c, long id);
     }
-    public static Factory factory = Gob::new;
 
     public Coord2d rc;
     public double a;

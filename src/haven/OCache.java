@@ -451,7 +451,7 @@ public class OCache implements Iterable<Gob> {
 			break main;
 		    }
 		    if(gob == null) {
-			gob = Gob.factory.create(glob, Coord2d.z, id);
+			gob = glob.gobFactory.create(glob, Coord2d.z, id);
 			gob.virtual = virtual;
 		    }
 		}

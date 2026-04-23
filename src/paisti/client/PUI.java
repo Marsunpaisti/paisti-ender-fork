@@ -14,7 +14,9 @@ public class PUI extends UI {
 	this.paistiServices = new PaistiServices();
 	this.paistiServices.bindUi(this);
 	this.paistiServices.start();
-	Gob.factory = PGob::new;
+	if(this.sess != null) {
+	    this.sess.glob.gobFactory = PGob::new;
+	}
     }
 
     public static PUI of(UI ui) {
@@ -66,7 +68,6 @@ public class PUI extends UI {
 
     @Override
     public void destroy() {
-	Gob.factory = Gob::new;
 	paistiServices.stop();
 	paistiServices.clearUi(this);
 	super.destroy();

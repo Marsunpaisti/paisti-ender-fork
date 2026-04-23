@@ -11,8 +11,10 @@ import paisti.plugin.PaistiPlugin;
 import paisti.plugin.overlay.ScreenOverlay;
 import paisti.plugin.overlay.ScreenOverlayContext;
 import paisti.plugin.overlay.ScreenOverlayScope;
+import sun.misc.Unsafe;
 
 import java.awt.Canvas;
+import java.lang.reflect.Field;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -92,9 +94,32 @@ class PUILifecycleTest {
             super(new DummyPanel(), Coord.of(10, 10), null);
         }
 
+        TestPUI(Session sess) {
+            super(new DummyPanel(), Coord.of(10, 10), new SessionRunner(sess));
+        }
+
         @Override
         protected RootWidget createRoot(Coord sz) {
             return new TestRootWidget(this, sz);
+        }
+    }
+
+    private static final class SessionRunner implements UI.Runner {
+        private final Session sess;
+
+        private SessionRunner(Session sess) {
+            this.sess = sess;
+        }
+
+        @Override
+        public UI.Runner run(UI ui) {
+            return null;
+        }
+
+        @Override
+        public void init(UI ui) {
+            ui.sess = sess;
+            sess.ui = ui;
         }
     }
 
@@ -131,6 +156,32 @@ class PUILifecycleTest {
         public void dispose() {
             disposed = true;
         }
+    }
+
+    private static Session session(String name) {
+        try {
+            Session sess = allocate(Session.class);
+            setField(Session.class, sess, "conn", new Transport.Playback(new java.io.StringReader("")));
+            setField(Session.class, sess, "user", new Session.User(name));
+            setField(Session.class, sess, "character", new CharacterInfo(sess));
+            setField(Session.class, sess, "glob", new Glob(sess));
+            return sess;
+        } catch(Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private static <T> T allocate(Class<T> cl) throws Exception {
+        Field field = Unsafe.class.getDeclaredField("theUnsafe");
+        field.setAccessible(true);
+        Unsafe unsafe = (Unsafe) field.get(null);
+        return cl.cast(unsafe.allocateInstance(cl));
+    }
+
+    private static void setField(Class<?> owner, Object target, String name, Object value) throws Exception {
+        Field field = owner.getDeclaredField(name);
+        field.setAccessible(true);
+        field.set(target, value);
     }
 
     @Test
@@ -192,5 +243,31 @@ class PUILifecycleTest {
 
         assertEquals(1, overlay.renders, "screen overlays must be rendered via PUI.draw() after the base UI draw pass");
         assertFalse(overlay.disposed, "rendering must not dispose the overlay");
+    }
+
+    @Test
+    @Tag("unit")
+    void gobFactoryIsScopedPerSessionAndSurvivesOtherPuiDestroy() {
+        Session firstSession = session("first");
+        Session secondSession = session("second");
+        PUI first = new TestPUI(firstSession);
+        PUI second = new TestPUI(secondSession);
+
+        try {
+            assertInstanceOf(PGob.class,
+                    firstSession.glob.gobFactory.create(firstSession.glob, Coord2d.z, 1L),
+                    "PUI must bind PGob creation onto its own session glob");
+            assertInstanceOf(PGob.class,
+                    secondSession.glob.gobFactory.create(secondSession.glob, Coord2d.z, 2L),
+                    "each session must keep its own PGob factory");
+
+            first.destroy();
+
+            assertInstanceOf(PGob.class,
+                    secondSession.glob.gobFactory.create(secondSession.glob, Coord2d.z, 3L),
+                    "destroying one PUI must not reset gob creation for another live session");
+        } finally {
+            second.destroy();
+        }
     }
 }
