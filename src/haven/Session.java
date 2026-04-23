@@ -408,6 +408,18 @@ public class Session implements Resource.Resolver {
 	}
     }
 
+    public PMessage pollUIMsg() {
+	synchronized(uimsgs) {
+	    if(uimsgs.isEmpty())
+		return(null);
+	    return(uimsgs.remove());
+	}
+    }
+
+    public boolean isClosed() {
+	return(closed);
+    }
+
     public void sendmsg(PMessage msg) {
 	conn.send(msg);
     }

@@ -89,10 +89,61 @@ public class RemoteUI implements UI.Receiver, UI.Runner {
 	this.sess.postuimsg(new Return(sess));
     }
 
+    public void attach(UI ui) {
+	ui.setreceiver(this);
+	sendua(ui);
+    }
+
+    public boolean dispatchMessage(PMessage msg, UI ui) throws InterruptedException {
+	if(msg == null)
+	    return(false);
+	if(msg instanceof Return)
+	    return(false);
+	if(msg.type == RMessage.RMSG_NEWWDG) {
+	    int id = msg.int32();
+	    String type = msg.string();
+	    int parent = msg.int32();
+	    Object[] pargs = msg.list(sess.resmapper);
+	    Object[] cargs = msg.list(sess.resmapper);
+	    ui.newwidgetp(id, type, parent, pargs, cargs);
+	} else if(msg.type == RMessage.RMSG_WDGMSG) {
+	    int id = msg.int32();
+	    String name = msg.string();
+	    ui.uimsg(id, name, msg.list(sess.resmapper));
+	} else if(msg.type == RMessage.RMSG_DSTWDG) {
+	    int id = msg.int32();
+	    ui.destroy(id);
+	} else if(msg.type == RMessage.RMSG_ADDWDG) {
+	    int id = msg.int32();
+	    int parent = msg.int32();
+	    Object[] pargs = msg.list(sess.resmapper);
+	    ui.addwidget(id, parent, pargs);
+	} else if(msg.type == RMessage.RMSG_WDGBAR) {
+	    Collection<Integer> deps = new ArrayList<>();
+	    while(!msg.eom()) {
+		int dep = msg.int32();
+		if(dep == -1)
+		    break;
+		deps.add(dep);
+	    }
+	    Collection<Integer> bars = deps;
+	    if(!msg.eom()) {
+		bars = new ArrayList<>();
+		while(!msg.eom()) {
+		    int bar = msg.int32();
+		    if(bar == -1)
+			break;
+		    bars.add(bar);
+		}
+	    }
+	    ui.wdgbarrier(deps, bars);
+	}
+	return(true);
+    }
+
     public UI.Runner run(UI ui) throws InterruptedException {
 	try {
-	    ui.setreceiver(this);
-	    sendua(ui);
+	    attach(ui);
 	    while(true) {
 		PMessage msg = sess.getuimsg();
 		if(msg == null) {
@@ -100,44 +151,8 @@ public class RemoteUI implements UI.Receiver, UI.Runner {
 		} else if(msg instanceof Return) {
 		    sess.close();
 		    return(new RemoteUI(((Return)msg).ret));
-		} else if(msg.type == RMessage.RMSG_NEWWDG) {
-		    int id = msg.int32();
-		    String type = msg.string();
-		    int parent = msg.int32();
-		    Object[] pargs = msg.list(sess.resmapper);
-		    Object[] cargs = msg.list(sess.resmapper);
-		    ui.newwidgetp(id, type, parent, pargs, cargs);
-		} else if(msg.type == RMessage.RMSG_WDGMSG) {
-		    int id = msg.int32();
-		    String name = msg.string();
-		    ui.uimsg(id, name, msg.list(sess.resmapper));
-		} else if(msg.type == RMessage.RMSG_DSTWDG) {
-		    int id = msg.int32();
-		    ui.destroy(id);
-		} else if(msg.type == RMessage.RMSG_ADDWDG) {
-		    int id = msg.int32();
-		    int parent = msg.int32();
-		    Object[] pargs = msg.list(sess.resmapper);
-		    ui.addwidget(id, parent, pargs);
-		} else if(msg.type == RMessage.RMSG_WDGBAR) {
-		    Collection<Integer> deps = new ArrayList<>();
-		    while(!msg.eom()) {
-			int dep = msg.int32();
-			if(dep == -1)
-			    break;
-			deps.add(dep);
-		    }
-		    Collection<Integer> bars = deps;
-		    if(!msg.eom()) {
-			bars = new ArrayList<>();
-			while(!msg.eom()) {
-			    int bar = msg.int32();
-			    if(bar == -1)
-				break;
-			    bars.add(bar);
-			}
-		    }
-		    ui.wdgbarrier(deps, bars);
+		} else {
+		    dispatchMessage(msg, ui);
 		}
 	    }
 	} finally {
