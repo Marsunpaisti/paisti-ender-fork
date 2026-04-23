@@ -46,6 +46,7 @@ Implementation spec for adding multiple simultaneous session support to the pais
 | UI lifecycle | `GLPanel.java` Loop.newui() (line 476) | Destroys previous UI unconditionally (line 499-502) | Add hooks to preserve session UIs |
 | UI creation | `GLPanel.java` Loop.makeui() (line 65) | Creates `new PUI(...)` | No change needed — already a factory |
 | Login flow | `Bootstrap.java` run() (line 337) | Returns `new RemoteUI(sess)` directly | Add `preRun()` hook, factory for RemoteUI |
+| Direct startup entrypoints | `MainFrame.java` main2() (lines 467-478) | Replay and `servargs` paths construct raw `RemoteUI` | Either wrap through the same session runner path or explicitly keep single-session-only |
 | Main loop | `MainFrame.java` uiloop() (line 330) | Hardcoded `new Bootstrap()` | Add factory pattern, lobby runner |
 | Config windows | 5 files | `static Window instance` singletons | Low priority — change to per-UI maps |
 | Gob factory | `Gob.java:50`, `PUI.java:17,69` | `static Factory factory` mutated per PUI lifecycle | Must refactor before multi-session (see below) |
@@ -57,6 +58,7 @@ Implementation spec for adding multiple simultaneous session support to the pais
 - **`PUI` constructor** (line 12): Already creates per-instance `PaistiServices`. Each session gets its own event bus, plugins, overlays automatically.
 - **`UI.setGUI()` / `UI.clearGUI()`** (UI.java:1162-1174): Lifecycle hooks for GameUI. PUI already overrides these (PUI.java:54-64).
 - **`Session.ui` field** (Session.java:79): Public, bidirectional binding set in RemoteUI.init().
+- **`UI.Runner.init()`** (UI.java:235-236): Runs during `UI` construction, before `GLPanel.newui()` assigns `ui.env`. Safe for session/UI binding, but too early for logic that depends on render environment data.
 
 ---
 
@@ -133,9 +135,15 @@ gob = glob.gobFactory.create(glob, Coord2d.z, id);
 public boolean isClosed() { return closed; }
 ```
 
-**3. `Bootstrap.run()` double-sets `sess.ui` (line 316)**
+**3. `Bootstrap.run()` temporary `sess.ui` binding needs care (line 316)**
 
-`Bootstrap.run()` line 316 sets `sess.ui = ui` pointing to the *Bootstrap's* temporary UI. Later, `RemoteUI.init()` re-sets it to the correct session UI. With `SessionRunner` in the flow, this creates a brief window where `sess.ui` points to the wrong UI. Remove line 316 or guard it — `RemoteUI.init()` handles the binding.
+`Bootstrap.run()` line 316 sets `sess.ui = ui` pointing to the *Bootstrap* login UI. It is tempting to remove this because `RemoteUI.init()` later rebinds `sess.ui` to the real session PUI, but the session is already live at that point and packets may arrive before the next `p.newui(fun)` call.
+
+Do **not** remove line 316 blindly. Either:
+- keep the temporary binding until `SessionRunner`/`RemoteUI` installs the real session UI, or
+- replace it with an audited staging strategy after checking async `sess.ui` consumers (`Gob`, `OCache`, mapping code, `CharacterInfo`, etc.).
+
+For the minimal implementation, leaving the temporary assignment in place is safer than creating a null window.
 
 ---
 
@@ -273,6 +281,8 @@ public class SessionContext {
     }
 }
 ```
+
+Also audit `MainFrame.main2()` (lines 467-478). The replay and `servargs` startup paths currently instantiate raw `RemoteUI` runners; either route them through the same wrapper flow or explicitly document them as single-session-only.
 
 ---
 
@@ -450,7 +460,7 @@ while(true) {
     // ... prefs, debug ...
     synchronized(ui) {
         ed.dispatch(ui);              // input events
-        ui.tick(dt);                  // widget tick
+        ui.tick();                    // widget tick
         if(ui.sess != null) {
             ui.sess.glob.ctick();     // world CPU tick
             ui.sess.glob.gtick(buf);  // world GPU tick
@@ -479,7 +489,7 @@ while(true) {
                 break; // session ended
         }
         synchronized(ctx.ui) {
-            ctx.ui.tick(dt);
+            ctx.ui.tick();
             if(ctx.session != null && !ctx.session.isClosed()) {
                 ctx.ui.sess.glob.ctick();
                 ctx.ui.sess.glob.map.sendreqs();
@@ -508,7 +518,7 @@ while(true) {
     else if(ui != null) {
         synchronized(ui) {
             ed.dispatch(ui);
-            ui.tick(dt);
+            ui.tick();
             if(ui.sess != null) {
                 ui.sess.glob.ctick();
                 ui.sess.glob.gtick(buf);
@@ -525,9 +535,10 @@ while(true) {
 - When no sessions are registered (login screen), the loop operates in vanilla mode
 - Input events (`ed.dispatch`) only go to the active/visible UI
 - `ui.mousehover(ui.mc)` (actual code line 384) must only run for the active session — include it in the active-session block alongside `ed.dispatch()`, not in the background session tick loop
-- `dt` calculation stays the same — it's wall-clock delta between frames
+- `UI.tick()` already computes widget delta internally from `UI.lasttick`; do not thread `dt` through the plan's new loops
 - `lockedui` handshake stays the same — it prevents `newui()` from destroying a UI mid-frame
-- `glob.map.sendreqs()` does not appear in the current `Loop.run()` — it may be called internally by `glob.ctick()` or elsewhere. Investigate whether background sessions need explicit map request sending, or if `ctick()` handles it. If map tiles stop loading for background sessions, add this call.
+- `glob.map.sendreqs()` currently happens from `MapView.draw()` (MapView.java:1888), not from `glob.ctick()`. Background sessions that are never drawn will stop issuing map requests unless you add an explicit call from the background tick path or explicitly accept stale map loading while unfocused.
+- Keep `Loop.ui` synchronized to the active visible session inside the loop/session-switch plumbing, not inside a keybind handler. `GLPanel.Loop` still reads `this.ui` for prefs, debug modifier state, and final display.
 
 **Gradual migration note:** You can implement this incrementally. Start by adding the session tick loop alongside the existing single-UI code. When `SessionManager` has 0 sessions, the existing code path runs unchanged. When sessions are registered, the multi-session path takes over.
 
@@ -561,6 +572,25 @@ public UI newui(UI.Runner fun) {
 ```java
 public UI newui(UI.Runner fun) {
     SessionManager sm = SessionManager.getInstance();
+    UI prevui;
+
+    // Hook 0: LobbyRunner should not create a throwaway PUI.
+    // Keep the active session UI bound to the loop while the uiloop thread blocks.
+    if(fun instanceof LobbyRunner) {
+        SessionContext active = sm.getActiveSession();
+        if(active != null) {
+            synchronized(uilock) {
+                prevui = this.ui;
+                ui = active.ui;
+            }
+            if((prevui != null) && (prevui != active.ui) && !isSessionUI(prevui, sm)) {
+                synchronized(prevui) {
+                    prevui.destroy();
+                }
+            }
+            return active.ui;
+        }
+    }
 
     // Hook 1: If switching to an existing session, reuse its UI
     if(fun instanceof RemoteUI) {
@@ -570,8 +600,9 @@ public UI newui(UI.Runner fun) {
                 // Reuse existing session UI — don't create or destroy anything
                 UI reused = ctx.ui;
                 reused.env = p.env();
+                UI prevui;
                 synchronized(uilock) {
-                    UI prevui = this.ui;
+                    prevui = this.ui;
                     ui = reused;
                     // ... lockedui handshake (same as before) ...
                 }
@@ -774,7 +805,7 @@ public class SessionRunner implements UI.Runner {
 
         // Set up the receiver so UI→server messages work
         ui.setreceiver(remoteUI);
-        remoteUI.sendua(ui);  // NOTE: sendua is private — needs to be made package-private or called via init
+        remoteUI.sendua(ui);  // make sendua(UI) package-private or protected
 
         // Hand off to lobby — GL loop now handles message dispatch for this session
         return new LobbyRunner();
@@ -787,12 +818,9 @@ public class SessionRunner implements UI.Runner {
 }
 ```
 
-**Important consideration:** The vanilla `RemoteUI.run()` sends the user-agent info (`sendua(ui)`) at the start of its loop. Since `SessionRunner` replaces the `run()` call, it needs to send this too. The `sendua()` method in RemoteUI is currently private. Options:
-1. Make `sendua(UI)` package-private or protected in RemoteUI
-2. Call `remoteUI.run(ui)` briefly and have it return a signal — more complex
-3. Move the `sendua()` call into `RemoteUI.init()` — cleanest
+**Important consideration:** The vanilla `RemoteUI.run()` sends the user-agent info (`sendua(ui)`) at the start of its loop. Since `SessionRunner` replaces the `run()` call, it needs to send this too. However, `UI.Runner.init()` is **too early** for this: `UI` calls `fun.init(this)` in its constructor, before `GLPanel.newui()` assigns `ui.env = p.env()`. If `sendua(ui)` moves into `init()`, `ui.getenv()` is still null and the render capability fields stop being reported.
 
-**Recommended:** Move the `sendua(ui)` call into `RemoteUI.init()` (line 149). It logically belongs there — it's session initialization, not part of the message loop. Then `SessionRunner.init()` just calls `remoteUI.init(ui)` and it's handled.
+**Recommended:** Make `sendua(UI)` package-private or protected in `RemoteUI`, and call it from `SessionRunner.run()` immediately after `ui.setreceiver(remoteUI)`. That preserves the current behavior while keeping the uiloop handoff short.
 
 ### How the uiloop flows after these changes:
 
@@ -804,10 +832,10 @@ public class SessionRunner implements UI.Runner {
    → Bootstrap returns SessionRunner(new RemoteUI(sess))
 3. uiloop: fun.run(p.newui(fun))
    → p.newui() creates PUI for SessionRunner
-   → SessionRunner.init() → RemoteUI.init() sets ui.sess, sends UA
-   → SessionRunner.run() registers session, returns LobbyRunner
+   → SessionRunner.init() → RemoteUI.init() sets ui.sess
+   → SessionRunner.run() sets receiver, sends UA, registers session, returns LobbyRunner
 4. uiloop: fun.run(p.newui(fun))
-   → p.newui() creates a "lobby" PUI (or we skip creation — see note below)
+   → p.newui() keeps the active session UI bound to the loop (no throwaway PUI)
    → LobbyRunner.run() blocks on waitForAddRequest()
    → ... user plays the game, GL loop handles everything ...
    → User presses "add account" keybind
@@ -818,43 +846,42 @@ public class SessionRunner implements UI.Runner {
    → Back to step 2
 ```
 
-**Note on LobbyRunner's PUI creation:** When `p.newui(LobbyRunner)` is called, it creates a throwaway PUI that's never rendered (the GL loop renders the active session's UI). This is wasteful but harmless. To optimize, `newui()` could detect LobbyRunner and skip UI creation, but this is optional polish.
+**Note on LobbyRunner's PUI creation:** In the current repo, this is **not** harmless. `PUI` starts `PaistiServices` in its constructor, and `GLPanel.Loop` still reads `this.ui` for prefs, modifier state, and display ownership. Creating a throwaway lobby PUI would start an extra service graph and desynchronize `Loop.ui` from the visible session. The plan should therefore special-case `LobbyRunner` in `GLPanel.newui()` instead of treating this as optional polish.
 
 ---
 
 ### Step 9: Session Switching Trigger
 
-For the minimal implementation, a simple keybind in the GL loop's input dispatch:
+For the minimal implementation, use the existing widget keybinding path rather than hardcoding AWT checks into `GLPanel.Loop.run()`.
 
-**File:** `src/haven/GLPanel.java`, in `Loop.run()` where keyboard events are dispatched, or via a widget keybind.
+**File:** `src/haven/GameUI.java`, `globtype(GlobKeyEvent ev)`
 
-**Minimal approach — add to `ed.dispatch()` handling or a root widget keybind:**
+**Minimal approach — add gameplay-scoped keybindings:**
 ```java
-// Example: Alt+Tab or Alt+1/2/3 to switch sessions
-// Alt+N to add new session
-if(ev.isKeyDown(KeyEvent.VK_TAB) && ev.hasAlt()) {
-    SessionManager.getInstance().switchToNext();
-    // Update Loop.ui to point to active session's UI
-    synchronized(uilock) {
-        SessionContext active = SessionManager.getInstance().getActiveSession();
-        if(active != null) {
-            this.ui = active.ui;
-        }
+public static final KeyBinding kb_nextsession =
+    KeyBinding.get("session-next", KeyMatch.forcode(KeyEvent.VK_TAB, KeyMatch.M));
+public static final KeyBinding kb_addsession =
+    KeyBinding.get("session-add", KeyMatch.forchar('N', KeyMatch.M));
+
+@Override
+public boolean globtype(GlobKeyEvent ev) {
+    if(kb_nextsession.key().match(ev)) {
+        SessionManager.getInstance().switchToNext();
+        return true;
+    } else if(kb_addsession.key().match(ev)) {
+        SessionManager.getInstance().requestAddAccount();
+        return true;
     }
-}
-if(ev.isKeyDown(KeyEvent.VK_N) && ev.hasAlt()) {
-    SessionManager.getInstance().requestAddAccount();
+    return super.globtype(ev);
 }
 ```
 
 The exact keybind mechanism depends on how the paisti-ender-fork handles input. This could be:
-- A hardcoded check in `Loop.run()` before `ed.dispatch(ui)`
-- A `RootWidget` keybind handler
-- A dedicated widget added to each session's UI
+- `GameUI.globtype()` (recommended for the minimal playable version)
+- `RootWidget.globtype()` if the shortcuts must work outside gameplay widgets too
+- A dedicated session-switcher widget if you want discoverability/UI affordance
 
-For the initial implementation, a hardcoded check in the GL loop is simplest. A proper keybind system can replace it later.
-
-**Important:** When switching, the `Loop.ui` field must be updated to point to the active session's UI. This is what the GL loop uses for `lockedui`, event dispatch, and rendering.
+Do not rely on the keybind handler to mutate `GLPanel.Loop.ui` directly. Keep that synchronization in the loop/session-manager plumbing from Step 5 so the rendering path has a single source of truth.
 
 ---
 
@@ -890,19 +917,20 @@ The `PUI.of(UI ui)` cast helper (line 20) remains correct — each session's UI 
 
 ## File Summary
 
-### Modified files (8)
+### Modified files (10)
 
 | File | Change | ~Lines |
 |------|--------|--------|
 | `src/haven/Session.java` | Add `pollUIMsg()` after line 406, add `isClosed()` getter | ~12 |
 | `src/haven/RemoteUI.java` | Add `dispatchMessage()`, make `sendua()` accessible | ~45 |
 | `src/haven/GLPanel.java` | Loop.run() multi-session tick/draw, newui() lifecycle hooks | ~80 |
-| `src/haven/Bootstrap.java` | Factory pattern, `preRun()` hook, `createRemoteUI()`, remove `sess.ui=ui` at line 316 | ~22 |
-| `src/haven/MainFrame.java` | `Bootstrap.create()` instead of `new Bootstrap()` | ~2 |
+| `src/haven/Bootstrap.java` | Factory pattern, `preRun()` hook, `createRemoteUI()`, preserve or carefully replace the temporary `sess.ui` bridge | ~22 |
+| `src/haven/MainFrame.java` | `Bootstrap.create()` instead of `new Bootstrap()`, plus decide how replay/direct-connect paths wrap `RemoteUI` | ~4 |
 | `src/haven/Gob.java` | Remove static `factory` field (move to Glob) | ~3 |
 | `src/haven/Glob.java` | Add `gobFactory` field | ~2 |
 | `src/haven/OCache.java` | Use `glob.gobFactory` instead of `Gob.factory` at line 454 | ~2 |
 | `src/paisti/client/PUI.java` | Remove `Gob.factory` mutation from constructor/destroy | ~4 |
+| `src/haven/GameUI.java` | Add minimal session-switch/add-account keybindings | ~15 |
 
 ### New files (4)
 
@@ -913,7 +941,7 @@ The `PUI.of(UI ui)` cast helper (line 20) remains correct — each session's UI 
 | `src/haven/session/LobbyRunner.java` | Blocks uiloop between logins | ~20 |
 | `src/haven/session/SessionRunner.java` | Registers session after login | ~35 |
 
-### Total: ~405 lines across 13 files
+### Total: ~420 lines across 14 files
 
 ---
 
@@ -927,11 +955,13 @@ After implementation, verify:
 - [ ] Switching between sessions shows the correct game view
 - [ ] Background sessions process server messages (world state updates)
 - [ ] Background sessions tick (glob.ctick, ui.tick running)
+- [ ] Background sessions still issue map requests intentionally (`sendreqs()` moved or deferred by design)
 - [ ] Each session has its own PaistiServices/EventBus/PluginService
 - [ ] Bot started on session A continues running when switched to session B
+- [ ] LobbyRunner does not create a throwaway `PUI` / extra `PaistiServices` instance
 - [ ] Closing a session cleans up properly (UI destroyed, removed from manager)
 - [ ] Closing one session does not break gob creation in other sessions
 - [ ] Client shutdown destroys all session UIs cleanly
 - [ ] No `NullPointerException` when switching during login
-- [ ] Window title updates when switching sessions
+- [ ] Replay/direct-connect startup paths are either intentionally single-session-only or routed through the same wrapper flow
 - [ ] `ui.mousehover()` only runs for the active session
