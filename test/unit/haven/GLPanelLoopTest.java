@@ -567,4 +567,104 @@ class GLPanelLoopTest {
         assertTrue(signal.tryAcquire(),
             "when returned session is null and no live successor exists, requestAddAccount must be called");
     }
+
+    /** Force a stub session into the fully-closed state (isClosed() == true). */
+    private static void forceSessionClosed(Session sess) throws Exception {
+        setField(Session.class, sess, "closereq", true);
+        setField(Session.class, sess, "connclosed", true);
+        setField(Session.class, sess, "closed", true);
+    }
+
+    @Test
+    @Tag("unit")
+    void prunedVisibleSessionRebindsToSuccessor() throws Exception {
+        DummyPanel panel = new DummyPanel();
+        TestLoop loop = new TestLoop(panel);
+        SessionManager mgr = SessionManager.getInstance();
+
+        // Two sessions: sess1 (visible, dead) and sess2 (alive)
+        Session sess1 = newStubSession();
+        TrackingUI ui1 = (TrackingUI) loop.newui(null);
+        sess1.ui = ui1;
+        ui1.sess = sess1;
+        SessionContext ctx1 = new SessionContext(sess1, ui1, new RemoteUI(sess1));
+        mgr.addSession(ctx1);
+
+        Session sess2 = newStubSession();
+        TrackingUI ui2 = new TrackingUI(panel);
+        sess2.ui = ui2;
+        ui2.sess = sess2;
+        SessionContext ctx2 = new SessionContext(sess2, ui2, new RemoteUI(sess2));
+        mgr.addSession(ctx2);
+
+        // Force sess1 into fully-closed state so pruning removes it
+        forceSessionClosed(sess1);
+        mgr.pruneDeadSessions();
+
+        // ui1 is no longer a session UI; handlePrunedVisibleSession should rebind
+        UI result = loop.handlePrunedVisibleSession(ui1);
+
+        assertSame(ui2, result,
+            "handlePrunedVisibleSession must rebind to the live successor session UI");
+        assertSame(ui2, loop.currentUi(),
+            "loop.ui must point to the successor after prune failover");
+    }
+
+    @Test
+    @Tag("unit")
+    void prunedVisibleSessionWithNoSuccessorReturnsNull() throws Exception {
+        DummyPanel panel = new DummyPanel();
+        TestLoop loop = new TestLoop(panel);
+        SessionManager mgr = SessionManager.getInstance();
+
+        // Single session, visible and dead
+        Session sess = newStubSession();
+        TrackingUI ui1 = (TrackingUI) loop.newui(null);
+        sess.ui = ui1;
+        ui1.sess = sess;
+        SessionContext ctx = new SessionContext(sess, ui1, new RemoteUI(sess));
+        mgr.addSession(ctx);
+
+        // Force fully closed and prune
+        forceSessionClosed(sess);
+        mgr.pruneDeadSessions();
+
+        UI result = loop.handlePrunedVisibleSession(ui1);
+
+        assertNull(result,
+            "handlePrunedVisibleSession must return null when no successor exists");
+        assertNull(loop.currentUi(),
+            "loop.ui must be null when no successor exists");
+
+        // Should have woken the login flow
+        Field addAccountField = SessionManager.class.getDeclaredField("addAccountSignal");
+        addAccountField.setAccessible(true);
+        java.util.concurrent.Semaphore signal = (java.util.concurrent.Semaphore) addAccountField.get(mgr);
+        assertTrue(signal.tryAcquire(),
+            "requestAddAccount must be called when no live successor exists");
+    }
+
+    @Test
+    @Tag("unit")
+    void prunedVisibleSessionNoOpWhenStillAlive() throws Exception {
+        DummyPanel panel = new DummyPanel();
+        TestLoop loop = new TestLoop(panel);
+        SessionManager mgr = SessionManager.getInstance();
+
+        // Single alive session
+        Session sess = newStubSession();
+        TrackingUI ui1 = (TrackingUI) loop.newui(null);
+        sess.ui = ui1;
+        ui1.sess = sess;
+        SessionContext ctx = new SessionContext(sess, ui1, new RemoteUI(sess));
+        mgr.addSession(ctx);
+
+        // Session is alive, not pruned
+        UI result = loop.handlePrunedVisibleSession(ui1);
+
+        assertSame(ui1, result,
+            "handlePrunedVisibleSession must return the same UI when session is still alive");
+        assertSame(ui1, loop.currentUi(),
+            "loop.ui must remain unchanged when session is still alive");
+    }
 }

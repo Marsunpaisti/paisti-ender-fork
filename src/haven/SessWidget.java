@@ -27,6 +27,7 @@
 package haven;
 
 import java.net.*;
+import paisti.client.PaistiSessions;
 
 public class SessWidget extends AWidget {
     private final Defer.Future<Result> conn;
@@ -64,7 +65,7 @@ public class SessWidget extends AWidget {
 			return(new Result(null, new Connection.SessionConnError()));
 		    }
 		    try {
-			return(new Result(Session.connect(new InetSocketAddress(host, port), acct, encrypt, cookie, args), null));
+			return(new Result(PaistiSessions.connect(new InetSocketAddress(host, port), acct, encrypt, cookie, args), null));
 		    } catch(Connection.SessionError err) {
 			return(new Result(null, err));
 		    }

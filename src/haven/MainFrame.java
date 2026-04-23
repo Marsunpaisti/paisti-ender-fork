@@ -27,6 +27,8 @@
 package haven;
 
 import haven.session.SessionRunner;
+import paisti.client.PaistiSessions;
+
 
 
 import java.awt.*;
@@ -39,7 +41,7 @@ import java.lang.reflect.*;
 import java.util.List;
 
 public class MainFrame extends java.awt.Frame implements Console.Directory {
-    private static final String TITLE = String.format("Haven & Hearth modified by Ender (v%s)", Config.version);
+    private static final String TITLE = String.format("Haven & Hearth Paisti Ender fork (v%s)", Config.version);
     public static final Config.Variable<Boolean> initfullscreen = Config.Variable.propb("haven.fullscreen", false);
     public static final Config.Variable<String> renderer = Config.Variable.prop("haven.renderer", "jogl");
     public static final Config.Variable<Boolean> status = Config.Variable.propb("haven.status", false);
@@ -319,7 +321,7 @@ public class MainFrame extends java.awt.Frame implements Console.Directory {
 	    }
 	}
 	try {
-	    return(Session.connect(new java.net.InetSocketAddress(java.net.InetAddress.getByName(gameserv.host), gameserv.port), acct, Connection.encrypt.get(), cookie, args));
+	    return(PaistiSessions.connect(new java.net.InetSocketAddress(java.net.InetAddress.getByName(gameserv.host), gameserv.port), acct, Connection.encrypt.get(), cookie, args));
 	} catch(Connection.SessionError e) {
 	    throw(new ConnectionError(e.getMessage()));
 	} catch(InterruptedException exc) {
@@ -469,7 +471,7 @@ public class MainFrame extends java.awt.Frame implements Console.Directory {
 	if(Bootstrap.replay.get() != null) {
 	    try {
 		Transport.Playback player = new Transport.Playback(Files.newBufferedReader(Bootstrap.replay.get(), Utils.utf8));
-		fun = new RemoteUI(new Session(player, new Session.User("Playback")));
+		fun = new RemoteUI(PaistiSessions.create(player, new Session.User("Playback")));
 		player.start();
 	    } catch(IOException e) {
 		System.err.println("hafen: " + e.getMessage());

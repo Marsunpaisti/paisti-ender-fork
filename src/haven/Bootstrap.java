@@ -27,6 +27,7 @@
 package haven;
 
 import haven.session.SessionRunner;
+import paisti.client.PaistiSessions;
 
 import java.io.*;
 import java.net.*;
@@ -314,7 +315,7 @@ public class Bootstrap implements UI.Receiver, UI.Runner {
 			if(i > 0)
 			    ui.uimsg(1, "prg", String.format("Connecting (address %d/%d)...", i + 1, addrs.size()));
 			try {
-			    sess = Session.connect(addrs.get(i), acct, Connection.encrypt.get(), cookie);
+			    sess = PaistiSessions.connect(addrs.get(i), acct, Connection.encrypt.get(), cookie);
 			    sess.ui = ui;
 			    break connect;
 			} catch(Connection.SessionConnError err) {

@@ -26,8 +26,6 @@
 
 package haven;
 
-import paisti.client.PGob;
-
 import java.io.IOException;
 import java.lang.ref.Reference;
 import java.lang.ref.WeakReference;
@@ -354,11 +352,15 @@ public class Session implements Resource.Resolver {
 	};
 
     public Session(Transport conn, User user) {
+	this(conn, user, Gob::new);
+    }
+
+    public Session(Transport conn, User user, Gob.Factory gobFactory) {
 	this.character = new CharacterInfo(this);
 	this.conn = conn;
 	this.user = user;
 	this.glob = new Glob(this);
-	this.glob.gobFactory = PGob::new;
+	this.glob.gobFactory = gobFactory;
 	conn.add(conncb);
 	if(record.get() != null) {
 	    try {
@@ -375,8 +377,12 @@ public class Session implements Resource.Resolver {
     }
 
     public static Session connect(SocketAddress server, User user, boolean encrypt, byte[] cookie, Object... args) throws InterruptedException {
+	return(connect(server, user, encrypt, cookie, Gob::new, args));
+    }
+
+    public static Session connect(SocketAddress server, User user, boolean encrypt, byte[] cookie, Gob.Factory gobFactory, Object... args) throws InterruptedException {
 	Connection conn = new Connection(server);
-	Session sess = new Session(conn, user);
+	Session sess = new Session(conn, user, gobFactory);
 	conn.connect((user.alias != null) ? user.alias : user.name, encrypt, cookie, args);
 	return(sess);
     }

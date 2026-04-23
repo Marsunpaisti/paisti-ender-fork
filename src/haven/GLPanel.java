@@ -466,6 +466,31 @@ public interface GLPanel extends UIPanel, UI.Context {
 	    return(true);
 	}
 
+	/**
+	 * After pruning, check whether the visible UI belonged to a
+	 * session that was just removed.  If so, rebind to a live
+	 * successor or null (waking the login flow).
+	 *
+	 * @return the UI to continue the frame with, or null if no
+	 *         successor exists and the frame should be skipped.
+	 */
+	UI handlePrunedVisibleSession(UI visibleUi) {
+	    SessionManager mgr = SessionManager.getInstance();
+	    if(mgr.isSessionUi(visibleUi))
+		return(visibleUi);
+	    synchronized(uilock) {
+		SessionContext successor = mgr.getActiveSession();
+		if(successor != null && successor.ui != null) {
+		    this.ui = successor.ui;
+		} else {
+		    this.ui = null;
+		    mgr.requestAddAccount();
+		}
+		this.lockedui = this.ui;
+		return(this.ui);
+	    }
+	}
+
 	public void run() throws InterruptedException {
 	    GLRender buf = null;
 	    try {
@@ -479,6 +504,7 @@ public interface GLPanel extends UIPanel, UI.Context {
 		    GLEnvironment env = p.env();
 		    buf = env.render();
 		    UI ui;
+		    boolean uiWasSession;
 		    synchronized(uilock) {
 			/* Sync this.ui with the active session, but only when
 			 * the current UI is already a managed session UI (or
@@ -490,6 +516,7 @@ public interface GLPanel extends UIPanel, UI.Context {
 			    this.ui = active.ui;
 			}
 			this.lockedui = ui = this.ui;
+			uiWasSession = (ui != null && mgr.isSessionUi(ui));
 			uilock.notifyAll();
 		    }
 		    Debug.cycle(ui.modflags());
@@ -520,6 +547,19 @@ public interface GLPanel extends UIPanel, UI.Context {
 		    int cfno = frameno++;
 		    /* Prune dead/terminal sessions before ticking */
 		    SessionManager.getInstance().pruneDeadSessions();
+		    /* If the visible session was just pruned, rebind to a
+		     * successor or enter a safe state. */
+		    if(uiWasSession) {
+			UI rebound = handlePrunedVisibleSession(ui);
+			if(rebound != ui) {
+			    ui = rebound;
+			    if(ui == null) {
+				env.submit(buf);
+				buf = null;
+				continue;
+			    }
+			}
+		    }
 		    /* Service background sessions */
 		    tickBackgroundSessions(ui);
 		    /* Service the visible session's message queue; if it was
