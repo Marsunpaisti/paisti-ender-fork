@@ -83,7 +83,10 @@ public interface GLPanel extends UIPanel, UI.Context {
 	}
 
 	private double framedur() {
-	    GSettings gp = this.ui.gprefs;
+	    UI cui = this.ui;
+	    if(cui == null)
+		return(0.0);
+	    GSettings gp = cui.gprefs;
 	    double hz = gp.hz.val, bghz = gp.bghz.val;
 	    if(bgmode) {
 		if(bghz != Double.POSITIVE_INFINITY)
@@ -515,9 +518,18 @@ public interface GLPanel extends UIPanel, UI.Context {
 			   && (this.ui == null || mgr.isSessionUi(this.ui))) {
 			    this.ui = active.ui;
 			}
-			this.lockedui = ui = this.ui;
+		    this.lockedui = ui = this.ui;
 			uiWasSession = (ui != null && mgr.isSessionUi(ui));
 			uilock.notifyAll();
+		    }
+		    /* If no UI is installed yet (e.g. after session pruning
+		     * set this.ui = null while waiting for login to provide
+		     * a replacement), skip this frame entirely. */
+		    if(ui == null) {
+			env.submit(buf);
+			buf = null;
+			Thread.sleep(10);
+			continue;
 		    }
 		    Debug.cycle(ui.modflags());
 		    GSettings prefs = ui.gprefs;
