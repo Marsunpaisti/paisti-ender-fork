@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import sun.misc.Unsafe;
 
 import java.awt.Canvas;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedList;
 import java.util.TreeMap;
@@ -17,12 +18,17 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class RemoteUITest {
     private static final class DummyTransport implements Transport {
+        private boolean closed;
+        private final Collection<PMessage> queuedMessages = new ArrayList<>();
+
         @Override
         public void close() {
+            closed = true;
         }
 
         @Override
         public void queuemsg(PMessage pmsg) {
+            queuedMessages.add(pmsg);
         }
 
         @Override
@@ -99,6 +105,12 @@ class RemoteUITest {
         private Object[] lastMessageArgs;
         private Collection<Integer> lastBarrierDeps;
         private Collection<Integer> lastBarrierBars;
+        private int lastNewWidgetId = -1;
+        private String lastNewWidgetType;
+        private int lastNewWidgetParent = Integer.MIN_VALUE;
+        private Object[] lastNewWidgetPargs;
+        private Object[] lastNewWidgetCargs;
+        private boolean interruptOnNewWidget;
 
         private RecordingUI() {
             super(new DummyPanel(), Coord.of(10, 10), null);
@@ -115,6 +127,18 @@ class RemoteUITest {
         }
 
         @Override
+        public void newwidgetp(int id, String type, int parent, Object[] pargs, Object... cargs) throws InterruptedException {
+            if(interruptOnNewWidget) {
+                throw new InterruptedException("test interruption");
+            }
+            lastNewWidgetId = id;
+            lastNewWidgetType = type;
+            lastNewWidgetParent = parent;
+            lastNewWidgetPargs = pargs;
+            lastNewWidgetCargs = cargs;
+        }
+
+        @Override
         public void uimsg(int id, String msg, Object... args) {
             lastMessageId = id;
             lastMessageName = msg;
@@ -128,18 +152,33 @@ class RemoteUITest {
         }
     }
 
-    private static Session newSession() {
+    private static final class SessionFixture {
+        private final DummyTransport transport = new DummyTransport();
+        private final Session session;
+
+        private SessionFixture(Session session) {
+            this.session = session;
+        }
+    }
+
+    private static SessionFixture newSessionFixture() {
         try {
             Session session = allocate(Session.class);
-            setField(Session.class, session, "conn", new DummyTransport());
+            SessionFixture fixture = new SessionFixture(session);
+            setField(Session.class, session, "conn", fixture.transport);
             setField(Session.class, session, "uimsgs", new LinkedList<PMessage>());
             setField(Session.class, session, "user", new Session.User("tester"));
             setField(Session.class, session, "rescache", new TreeMap<Integer, Session.CachedRes>());
             setField(Session.class, session, "resmapper", new ResID.ResolveMapper(session));
-            return session;
+            setField(Session.class, session, "glob", new Glob(session));
+            return fixture;
         } catch(Exception e) {
             throw new RuntimeException(e);
         }
+    }
+
+    private static Session newSession() {
+        return newSessionFixture().session;
     }
 
     private static <T> T allocate(Class<T> cl) throws Exception {
@@ -159,6 +198,12 @@ class RemoteUITest {
         return new PMessage(msg.type, msg.fin());
     }
 
+    private static PMessage addEncodedList(PMessage msg, Object... args) {
+        msg.addlist(args);
+        msg.adduint8(Message.T_END);
+        return (PMessage) msg;
+    }
+
     @Test
     @Tag("unit")
     void pollUIMsgReturnsQueuedMessagesThenNull() {
@@ -170,6 +215,32 @@ class RemoteUITest {
 
         assertEquals(incoming(msg), session.pollUIMsg(), "pollUIMsg() must return the queued message without blocking");
         assertNull(session.pollUIMsg(), "pollUIMsg() must return null when the queue is empty");
+    }
+
+    @Test
+    @Tag("unit")
+    void isClosedBecomesTrueWhenSessionIsClosed() {
+        SessionFixture fixture = newSessionFixture();
+
+        assertFalse(fixture.session.isClosed(), "sanity check: fresh test session should start open");
+
+        fixture.session.close();
+
+        assertTrue(fixture.session.isClosed(), "close() must make isClosed() report true immediately");
+        assertTrue(fixture.transport.closed, "close() must still close the underlying transport");
+    }
+
+    @Test
+    @Tag("unit")
+    void attachSetsReceiverAndSendsUserAgentMessages() {
+        SessionFixture fixture = newSessionFixture();
+        RemoteUI remote = new RemoteUI(fixture.session);
+        RecordingUI ui = new RecordingUI();
+
+        remote.attach(ui);
+
+        assertSame(remote, ui.rcvr, "attach() must set the UI receiver to this RemoteUI");
+        assertFalse(fixture.transport.queuedMessages.isEmpty(), "attach() must enqueue user-agent messages");
     }
 
     @Test
@@ -188,6 +259,47 @@ class RemoteUITest {
         assertEquals(5, ui.lastMessageId);
         assertEquals("ping", ui.lastMessageName);
         assertArrayEquals(new Object[]{"arg", 3}, ui.lastMessageArgs);
+    }
+
+    @Test
+    @Tag("unit")
+    void dispatchMessageRoutesNewWidgetMessages() throws InterruptedException {
+        Session session = newSession();
+        RemoteUI remote = new RemoteUI(session);
+        RecordingUI ui = new RecordingUI();
+
+        PMessage newWidget = new PMessage(RMessage.RMSG_NEWWDG);
+        newWidget.addint32(9);
+        newWidget.addstring("dummy");
+        newWidget.addint32(2);
+        addEncodedList(newWidget, "parent");
+        addEncodedList(newWidget, "child", 7);
+
+        assertTrue(remote.dispatchMessage(incoming(newWidget), ui), "new widget messages should be consumed");
+        assertEquals(9, ui.lastNewWidgetId);
+        assertEquals("dummy", ui.lastNewWidgetType);
+        assertEquals(2, ui.lastNewWidgetParent);
+        assertArrayEquals(new Object[]{"parent"}, ui.lastNewWidgetPargs);
+        assertArrayEquals(new Object[]{"child", 7}, ui.lastNewWidgetCargs);
+    }
+
+    @Test
+    @Tag("unit")
+    void dispatchMessagePropagatesInterruptedNewWidgetCreation() {
+        Session session = newSession();
+        RemoteUI remote = new RemoteUI(session);
+        RecordingUI ui = new RecordingUI();
+        ui.interruptOnNewWidget = true;
+
+        PMessage newWidget = new PMessage(RMessage.RMSG_NEWWDG);
+        newWidget.addint32(9);
+        newWidget.addstring("dummy");
+        newWidget.addint32(-1);
+        addEncodedList(newWidget);
+        addEncodedList(newWidget);
+
+        assertThrows(InterruptedException.class, () -> remote.dispatchMessage(incoming(newWidget), ui),
+                "dispatchMessage() must not swallow interrupted new-widget creation");
     }
 
     @Test

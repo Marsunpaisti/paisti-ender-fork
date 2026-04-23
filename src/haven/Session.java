@@ -79,7 +79,7 @@ public class Session implements Resource.Resolver {
     public SignKey sesskey;
     public final CharacterInfo character;
     public UI ui;
-    private boolean closed = false;
+    private volatile boolean closed = false;
     private int localCacheId = -1;
 
     public static class User {
@@ -381,6 +381,10 @@ public class Session implements Resource.Resolver {
     }
 
     public void close() {
+	synchronized(uimsgs) {
+	    closed = true;
+	    uimsgs.notifyAll();
+	}
 	conn.close();
 	glob.oc.destroy();
     }
