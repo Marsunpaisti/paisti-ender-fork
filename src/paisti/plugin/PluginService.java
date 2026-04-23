@@ -2,7 +2,7 @@ package paisti.plugin;
 
 import com.google.common.collect.ImmutableList;
 import haven.Config;
-import haven.PaistiServices;
+import paisti.client.PaistiServices;
 import haven.PluginConfig;
 import paisti.plugin.DevToolsPlugin.DevToolsPlugin;
 

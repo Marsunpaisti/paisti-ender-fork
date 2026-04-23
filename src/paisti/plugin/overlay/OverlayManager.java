@@ -4,7 +4,7 @@ import haven.GOut;
 import haven.GameUI;
 import haven.Loading;
 import haven.MapView;
-import haven.PaistiServices;
+import paisti.client.PaistiServices;
 import haven.render.Pipe;
 import haven.render.Render;
 import haven.render.RenderTree;

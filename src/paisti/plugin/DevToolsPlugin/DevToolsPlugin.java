@@ -1,6 +1,6 @@
 package paisti.plugin.DevToolsPlugin;
 
-import haven.PaistiServices;
+import paisti.client.PaistiServices;
 import paisti.hooks.EventBus;
 import paisti.hooks.events.BeforeOutgoingWidgetMessage;
 import paisti.plugin.PaistiPlugin;

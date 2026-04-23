@@ -1,6 +1,6 @@
 package paisti.plugin;
 
-import haven.PaistiServices;
+import paisti.client.PaistiServices;
 import haven.UI;
 import paisti.hooks.EventBus;
 import paisti.plugin.overlay.OverlayManager;
