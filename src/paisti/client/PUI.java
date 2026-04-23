@@ -16,12 +16,6 @@ public class PUI extends UI {
 	this.paistiServices.start();
     }
 
-    public static void bindGobFactory(Session sess) {
-	if(sess != null) {
-	    sess.glob.gobFactory = PGob::new;
-	}
-    }
-
     public static PUI of(UI ui) {
 	return (PUI) ui;
     }

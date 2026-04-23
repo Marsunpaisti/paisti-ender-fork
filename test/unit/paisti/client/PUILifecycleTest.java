@@ -124,6 +124,12 @@ class PUILifecycleTest {
         }
     }
 
+    private static final class TestGob extends Gob {
+        private TestGob(Glob glob, Coord2d c, long id) {
+            super(glob, c, id);
+        }
+    }
+
     @PluginDescription(name = "Lifecycle Test Plugin", configName = "pui-lifecycle-test")
     private static final class TestPlugin extends PaistiPlugin {
         private TestPlugin(PaistiServices services) {
@@ -160,12 +166,17 @@ class PUILifecycleTest {
     }
 
     private static Session session(String name) {
+        return session(name, PGob::new);
+    }
+
+    private static Session session(String name, Gob.Factory gobFactory) {
         try {
             Session sess = allocate(Session.class);
             setField(Session.class, sess, "conn", new Transport.Playback(new java.io.StringReader("")));
             setField(Session.class, sess, "user", new Session.User(name));
             setField(Session.class, sess, "character", new CharacterInfo(sess));
             setField(Session.class, sess, "glob", new Glob(sess));
+            sess.glob.gobFactory = gobFactory;
             return sess;
         } catch(Exception e) {
             throw new RuntimeException(e);
@@ -288,6 +299,22 @@ class PUILifecycleTest {
                     "destroying one PUI must not reset gob creation for another live session");
         } finally {
             second.destroy();
+        }
+    }
+
+    @Test
+    @Tag("unit")
+    void remoteUiInitDoesNotOverridePreconfiguredSessionGobFactory() {
+        Session session = session("custom", TestGob::new);
+        EarlyGobCreatingRemoteUI runner = new EarlyGobCreatingRemoteUI(session, 11L);
+
+        PUI pui = new TestPUI(runner);
+        try {
+            assertInstanceOf(TestGob.class,
+                    runner.createdGob,
+                    "RemoteUI.init() must not overwrite a session gob factory that was configured earlier");
+        } finally {
+            pui.destroy();
         }
     }
 }

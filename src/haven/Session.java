@@ -26,6 +26,8 @@
 
 package haven;
 
+import paisti.client.PGob;
+
 import java.io.IOException;
 import java.lang.ref.Reference;
 import java.lang.ref.WeakReference;
@@ -355,6 +357,7 @@ public class Session implements Resource.Resolver {
 	this.conn = conn;
 	this.user = user;
 	this.glob = new Glob(this);
+	this.glob.gobFactory = PGob::new;
 	conn.add(conncb);
 	if(record.get() != null) {
 	    try {
