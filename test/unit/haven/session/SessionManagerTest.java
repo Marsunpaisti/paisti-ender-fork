@@ -37,9 +37,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class SessionManagerTest {
     private static final class DummyTransport implements Transport {
         private final List<Callback> callbacks = new ArrayList<>();
+        private int closeCalls;
 
         @Override
         public void close() {
+            closeCalls++;
         }
 
         @Override
@@ -256,7 +258,8 @@ class SessionManagerTest {
 
         assertEquals(1, manager.getSessions().size());
         assertSame(first.context, manager.getActiveSession());
-        assertEquals(0, second.ui.destroyCalls, "manager must not destroy UI during pruning");
+        assertEquals(1, second.ui.destroyCalls, "pruning must delegate teardown to the context exactly once");
+        assertEquals(1, second.transport.closeCalls, "pruning must not re-close an already terminal session more than once");
 
         reset(manager);
     }
@@ -278,7 +281,13 @@ class SessionManagerTest {
 
         assertEquals(2, manager.getSessions().size());
         assertSame(second.context, manager.getActiveSession());
-        assertEquals(0, third.ui.destroyCalls, "manager must not destroy UI during direct removal");
+        assertEquals(1, third.ui.destroyCalls, "removal must delegate teardown to the context exactly once");
+        assertEquals(1, third.transport.closeCalls, "removal must close the removed session exactly once");
+
+        manager.removeSession(third.context);
+
+        assertEquals(1, third.ui.destroyCalls, "re-removing a deregistered session must not teardown twice");
+        assertEquals(1, third.transport.closeCalls, "re-removing a deregistered session must not re-close twice");
 
         reset(manager);
     }
@@ -300,7 +309,8 @@ class SessionManagerTest {
 
         assertEquals(2, manager.getSessions().size());
         assertSame(third.context, manager.getActiveSession());
-        assertEquals(0, first.ui.destroyCalls, "manager must not destroy UI when removing an inactive session");
+        assertEquals(1, first.ui.destroyCalls, "removing an inactive session must still delegate teardown once");
+        assertEquals(1, first.transport.closeCalls, "removing an inactive session must close it once");
 
         reset(manager);
     }

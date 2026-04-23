@@ -8,6 +8,7 @@ public class SessionContext {
     public final Session session;
     public final UI ui;
     public final RemoteUI remoteUI;
+    private boolean disposed = false;
 
     public SessionContext(Session session, UI ui, RemoteUI remoteUI) {
         this.session = session;
@@ -21,5 +22,18 @@ public class SessionContext {
 
     public void close() {
         session.close();
+    }
+
+    public void dispose() {
+        synchronized(this) {
+            if(disposed) {
+                return;
+            }
+            disposed = true;
+        }
+        session.close();
+        synchronized(ui) {
+            ui.destroy();
+        }
     }
 }

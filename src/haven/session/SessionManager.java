@@ -29,7 +29,7 @@ public class SessionManager {
     public void removeSession(SessionContext ctx) {
         SessionContext removed = removeRegisteredSession(ctx);
         if(removed != null) {
-            removed.close();
+            removed.dispose();
         }
     }
 
@@ -69,13 +69,20 @@ public class SessionManager {
         addAccountSignal.acquire();
     }
 
-    public synchronized void pruneDeadSessions() {
+    public void pruneDeadSessions() {
+        List<SessionContext> removed = new ArrayList<>();
+        synchronized(this) {
         for(Iterator<SessionContext> it = sessions.iterator(); it.hasNext();) {
             SessionContext ctx = it.next();
             if(ctx.isAlive()) {
                 continue;
             }
             removeRegisteredSession(it, ctx);
+            removed.add(ctx);
+        }
+        }
+        for(SessionContext ctx : removed) {
+            ctx.dispose();
         }
     }
 
