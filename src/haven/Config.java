@@ -48,6 +48,8 @@ public class Config {
     public static final File HOMEDIR = getHomeDir();
     public static final String confid = get().getprop("config.client-id", "unknown");
     public static final String clientType = get().getprop("ender.client-type", confid);
+    static final String DEFAULT_HOME_MODE = "hashdir";
+    static final String HASHDIR_HOME_NAME = "paisti-ender-fork";
     public static final Variable<Boolean> par = Variable.def(() -> true);
     public final Properties localprops = getlocalprops();
 
@@ -96,14 +98,22 @@ public class Config {
     }
     
     private static File getHomeDir() {
-	String dir = get().getprop("config.homedir", "workdir");
-	if("hashdir".equals(dir)) {
-	    File file = new File(HashDirCache.findbase().getParent() + File.separator + "ender-client");
-	    file.mkdirs();
-	    return file.getAbsoluteFile();
+	Path home = resolveHomeDir(get().getprop("config.homedir", null), HashDirCache.findbase(), Paths.get("").toAbsolutePath());
+	home.toFile().mkdirs();
+	return home.toFile().getAbsoluteFile();
+    }
+
+	static Path resolveHomeDir(String dir, Path cacheBase, Path workdir) {
+	if(dir == null) {
+	    dir = DEFAULT_HOME_MODE;
 	}
-	
-	return new File("").getAbsoluteFile();
+	if("hashdir".equals(dir) && (cacheBase != null)) {
+	    Path parent = cacheBase.getParent();
+	    if(parent != null) {
+		return parent.resolve(HASHDIR_HOME_NAME);
+	    }
+	}
+	return workdir;
     }
     
     public static File getFile(String name) {

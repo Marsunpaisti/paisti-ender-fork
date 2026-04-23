@@ -1,5 +1,6 @@
 /build
 /bin
+/bin-dev
 /local-config.properties
 /local-boot.properties
 /build.properties
