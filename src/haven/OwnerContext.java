@@ -123,6 +123,5 @@ public interface OwnerContext {
     public static final ClassResolver<UI> uictx = new ClassResolver<UI>()
 	.add(UI.class, ui -> ui)
 	.add(Glob.class, ui -> ui.sess.glob)
-	.add(Session.class, ui -> ui.sess)
-	.add(PaistiServices.class, UI::services);
+	.add(Session.class, ui -> ui.sess);
 }
