@@ -46,9 +46,6 @@ import java.util.List;
 
 import haven.render.Environment;
 import haven.render.Render;
-import paisti.hooks.EventBus;
-import paisti.hooks.events.BeforeOutgoingWidgetMessage;
-import paisti.plugin.PluginService;
 
 public class UI {
     public static int MOD_SHIFT = KeyMatch.S, MOD_CTRL = KeyMatch.C, MOD_META = KeyMatch.M, MOD_SUPER = KeyMatch.SUPER;
@@ -77,7 +74,6 @@ public class UI {
     public Console cons = new WidgetConsole();
     private Collection<AfterDraw> afterdraws = new LinkedList<AfterDraw>();
     private final Context uictx;
-    private final PaistiServices paistiServices;
     public GSettings gprefs = GSettings.load(true);
     private boolean gprefsdirty = false;
     public final ActAudio.Root audio = new ActAudio.Root();
@@ -233,24 +229,6 @@ public class UI {
 
     public UI(Context uictx, Coord sz, Runner fun) {
 	this.uictx = uictx;
-	this.paistiServices = new PaistiServices();
-	this.paistiServices.bindUi(this);
-	root = createRoot(sz);
-	widgets.put(0, root);
-	rwidgets.put(root, 0);
-	if(fun != null)
-	    fun.init(this);
-	if(sess == null) {
-	    loader = new Loader();
-	} else {
-	    if((loader = sess.glob.loader) == null)
-		throw(new NullPointerException());
-	}
-    }
-
-    public UI(Context uictx, Coord sz, Runner fun, PaistiServices paistiServices) {
-	this.uictx = uictx;
-	this.paistiServices = paistiServices;
 	root = createRoot(sz);
 	widgets.put(0, root);
 	rwidgets.put(root, 0);
@@ -267,18 +245,6 @@ public class UI {
     protected RootWidget createRoot(Coord sz) {
 	return new RootWidget(this, sz);
     }
-
-	public PaistiServices services() {
-	    return paistiServices;
-	}
-
-	public EventBus eventBus() {
-	    return paistiServices.eventBus();
-	}
-
-	public PluginService pluginService() {
-	    return paistiServices.pluginService();
-	}
 
     public static class Command implements Serializable {
 	private static final java.util.concurrent.atomic.AtomicInteger nextid = new java.util.concurrent.atomic.AtomicInteger(0);
@@ -461,7 +427,6 @@ public class UI {
 		ad.draw(g);
 	    afterdraws.clear();
 	}
-	paistiServices.overlayManager().renderScreenOverlays(g);
     }
 
     private Collection<Integer> or_deps = null, or_bars = null;
@@ -745,7 +710,6 @@ public class UI {
 	    new Warning("wdgmsg sender (%s) is not in rwidgets, message is %s", sender.getClass().getName(), msg).issue();
 	    return;
 	}
-	eventBus().post(new BeforeOutgoingWidgetMessage(this, sender, id, msg, args));
 	if(rcvr != null)
 	    rcvr.rcvmsg(id, msg, args);
     }
@@ -1057,7 +1021,6 @@ public class UI {
     }
 
     public void destroy() {
-	paistiServices.clearUi(this);
 	root.destroy();
 	audio.clear();
     }
@@ -1200,19 +1163,13 @@ public class UI {
 	synchronized (guiLock) {
 	    this.gui = gui;
 	}
-	paistiServices.overlayManager().syncMapOverlayAttachment();
     }
     
     public void clearGUI(GameUI gui) {
-	boolean cleared = false;
 	synchronized (guiLock) {
 	    if(this.gui == gui) {
 		this.gui = null;
-		cleared = true;
 	    }
-	}
-	if(cleared) {
-	    paistiServices.overlayManager().syncMapOverlayAttachment();
 	}
     }
 
