@@ -1796,7 +1796,7 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
     public static final KeyBinding kb_hide = KeyBinding.get("ui-toggle", KeyMatch.nil);
     public static final KeyBinding kb_logout = KeyBinding.get("logout", KeyMatch.nil);
     public static final KeyBinding kb_switchchr = KeyBinding.get("logout-cs", KeyMatch.nil);
-    public static final KeyBinding kb_switchsession = KeyBinding.get("session-next", KeyMatch.forcode(KeyEvent.VK_F6, 0));
+    public static final KeyBinding kb_switchsession = KeyBinding.get("session-next", KeyMatch.forchar('Q', KeyMatch.M));
     public static final KeyBinding kb_addaccount = KeyBinding.get("session-add", KeyMatch.forchar('N', KeyMatch.M));
     public boolean globtype(GlobKeyEvent ev) {
 	if(ev.c == ':') {
