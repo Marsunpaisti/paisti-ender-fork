@@ -12,8 +12,13 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.awt.Canvas;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.LinkedList;
+import java.util.TreeMap;
+
+import sun.misc.Unsafe;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -234,21 +239,124 @@ class GLPanelLoopTest {
         SessionContext ctx2 = new SessionContext(null, ui2, null);
         mgr.addSession(ctx2); // ctx2 is now the active session
 
-        // loop.ui is still ui1, but active session is ctx2
+        // loop.ui is still ui1 (a session UI), active is ctx2
         assertSame(ui1, loop.currentUi());
 
-        // Simulate what the loop does: sync this.ui with active session under uilock
+        // Simulate the sync logic from the loop
+        syncUi(loop, mgr);
+
+        assertSame(ui2, loop.currentUi(),
+            "loop.ui should sync to the active session's UI when current is a session UI");
+    }
+
+    @Test
+    @Tag("unit")
+    void loopDoesNotOverrideNonSessionUiWithActiveSession() throws Exception {
+        DummyPanel panel = new DummyPanel();
+        TestLoop loop = new TestLoop(panel);
+
+        // Set up a non-session login UI as the current UI
+        TrackingUI loginUi = (TrackingUI) loop.newui(new Bootstrap());
+        SessionManager mgr = SessionManager.getInstance();
+
+        // Register a session (simulating a background session exists)
+        TrackingUI sessionUi = new TrackingUI(panel);
+        mgr.addSession(new SessionContext(null, sessionUi, null));
+
+        // loginUi is NOT a session UI; active session exists
+        assertSame(loginUi, loop.currentUi());
+
+        // Simulate the sync logic — should NOT override the login UI
+        syncUi(loop, mgr);
+
+        assertSame(loginUi, loop.currentUi(),
+            "loop.ui must not be overridden when current UI is a standalone login/bootstrap UI");
+    }
+
+    /** Reproduce the uilock sync block from GLPanel.Loop.run() */
+    private void syncUi(TestLoop loop, SessionManager mgr) throws Exception {
         Field uilockField = GLPanel.Loop.class.getDeclaredField("uilock");
         uilockField.setAccessible(true);
         Object uilock = uilockField.get(loop);
         synchronized(uilock) {
-            SessionContext active = mgr.getActiveSession();
-            if(active != null && active.ui != null && active.ui != loop.ui) {
+            haven.session.SessionContext active = mgr.getActiveSession();
+            if(active != null && active.ui != null && active.ui != loop.ui
+               && (loop.ui == null || mgr.isSessionUi(loop.ui))) {
                 loop.ui = active.ui;
             }
         }
+    }
 
-        assertSame(ui2, loop.currentUi(),
-            "loop.ui should sync to the active session's UI");
+    /* --- Session fixture helpers (Unsafe-based, mirrors SessionRunnerTest) --- */
+
+    private static final class DummyTransport implements Transport {
+        @Override public void close() {}
+        @Override public void queuemsg(PMessage pmsg) {}
+        @Override public void send(PMessage msg) {}
+        @Override public Transport add(Callback cb) { return this; }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Session newStubSession() throws Exception {
+        Field uf = Unsafe.class.getDeclaredField("theUnsafe");
+        uf.setAccessible(true);
+        Unsafe unsafe = (Unsafe) uf.get(null);
+        Session s = (Session) unsafe.allocateInstance(Session.class);
+        setField(Session.class, s, "conn", new DummyTransport());
+        setField(Session.class, s, "uimsgs", new LinkedList<PMessage>());
+        setField(Session.class, s, "user", new Session.User("stub"));
+        setField(Session.class, s, "rescache", new TreeMap<>());
+        setField(Session.class, s, "resmapper", new ResID.ResolveMapper(s));
+        setField(Session.class, s, "glob", new Glob(s));
+        Constructor<?> ctor = Class.forName("haven.Session$1").getDeclaredConstructor(Session.class);
+        ctor.setAccessible(true);
+        Transport.Callback conncb = (Transport.Callback) ctor.newInstance(s);
+        setField(Session.class, s, "conncb", conncb);
+        return s;
+    }
+
+    private static void setField(Class<?> owner, Object target, String name, Object value) throws Exception {
+        Field f = owner.getDeclaredField(name);
+        f.setAccessible(true);
+        f.set(target, value);
+    }
+
+    @Test
+    @Tag("unit")
+    void returnMessageRemovesSessionContextInsteadOfLeaking() throws Exception {
+        DummyPanel panel = new DummyPanel();
+        TestLoop loop = new TestLoop(panel);
+        SessionManager mgr = SessionManager.getInstance();
+
+        // Build a real-enough session with a Return message queued
+        Session sess = newStubSession();
+        Session returnedSess = newStubSession();
+        sess.postuimsg(new RemoteUI.Return(returnedSess));
+
+        TrackingUI sessionUi = (TrackingUI) loop.newui(null);
+        sess.ui = sessionUi;
+        sessionUi.sess = sess;
+        RemoteUI remote = new RemoteUI(sess);
+        SessionContext ctx = new SessionContext(sess, sessionUi, remote);
+        mgr.addSession(ctx);
+
+        // Use a different visible UI so the session is iterated
+        TrackingUI visibleUi = new TrackingUI(panel);
+
+        Method tick = GLPanel.Loop.class.getDeclaredMethod("tickBackgroundSessions", UI.class);
+        tick.setAccessible(true);
+        tick.invoke(loop, visibleUi);
+
+        // The context should have been removed from the manager
+        assertFalse(mgr.getSessions().contains(ctx),
+            "RemoteUI.Return must cause the session context to be removed, not silently lost");
+
+        // The returned session should have close() called (closereq set).
+        // Note: isClosed() requires transport-closed AND queue-drained, which
+        // won't happen with a stub transport. Check closereq directly.
+        Field closereqField = Session.class.getDeclaredField("closereq");
+        closereqField.setAccessible(true);
+        assertTrue((boolean) closereqField.get(returnedSess),
+            "The returned session from RemoteUI.Return must have close() called to prevent leaks");
     }
 }

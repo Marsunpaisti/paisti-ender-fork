@@ -349,7 +349,8 @@ public interface GLPanel extends UIPanel, UI.Context {
 	 * (that happens in the main loop body with GPU tick).
 	 */
 	private void tickBackgroundSessions(UI visibleUi) {
-	    for(SessionContext ctx : SessionManager.getInstance().getSessions()) {
+	    SessionManager mgr = SessionManager.getInstance();
+	    for(SessionContext ctx : mgr.getSessions()) {
 		UI sui = ctx.ui;
 		if(sui == null)
 		    continue;
@@ -358,8 +359,18 @@ public interface GLPanel extends UIPanel, UI.Context {
 		    if(ctx.session != null && ctx.remoteUI != null) {
 			PMessage msg;
 			while((msg = ctx.session.pollUIMsg()) != null) {
-			    /* Conservative MVP: stop on Return messages;
-			     * they stay queued for the runner to handle. */
+			    if(msg instanceof RemoteUI.Return) {
+				/* MVP policy: session handoff via Return is not
+				 * supported for GL-loop-managed sessions.  Close
+				 * the returned session so it is not leaked, then
+				 * tear down this context. */
+				Session returned = ((RemoteUI.Return)msg).ret;
+				if(returned != null) {
+				    try { returned.close(); } catch(Exception e) { new Warning(e, "closing leaked Return session").issue(); }
+				}
+				mgr.removeSession(ctx);
+				break;
+			    }
 			    try {
 				if(!ctx.remoteUI.dispatchMessage(msg, sui))
 				    break;
@@ -395,9 +406,13 @@ public interface GLPanel extends UIPanel, UI.Context {
 		    buf = env.render();
 		    UI ui;
 		    synchronized(uilock) {
-			/* Sync this.ui with the active session when applicable */
-			SessionContext active = SessionManager.getInstance().getActiveSession();
-			if(active != null && active.ui != null && active.ui != this.ui) {
+			/* Sync this.ui with the active session, but only when
+			 * the current UI is already a managed session UI (or
+			 * null).  Never override a standalone login/bootstrap UI. */
+			SessionManager mgr = SessionManager.getInstance();
+			SessionContext active = mgr.getActiveSession();
+			if(active != null && active.ui != null && active.ui != this.ui
+			   && (this.ui == null || mgr.isSessionUi(this.ui))) {
 			    this.ui = active.ui;
 			}
 			this.lockedui = ui = this.ui;
