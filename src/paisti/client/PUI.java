@@ -14,8 +14,11 @@ public class PUI extends UI {
 	this.paistiServices = new PaistiServices();
 	this.paistiServices.bindUi(this);
 	this.paistiServices.start();
-	if(this.sess != null) {
-	    this.sess.glob.gobFactory = PGob::new;
+    }
+
+    public static void bindGobFactory(Session sess) {
+	if(sess != null) {
+	    sess.glob.gobFactory = PGob::new;
 	}
     }
 

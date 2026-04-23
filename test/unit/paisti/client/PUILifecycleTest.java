@@ -95,7 +95,11 @@ class PUILifecycleTest {
         }
 
         TestPUI(Session sess) {
-            super(new DummyPanel(), Coord.of(10, 10), new SessionRunner(sess));
+            super(new DummyPanel(), Coord.of(10, 10), new RemoteUI(sess));
+        }
+
+        TestPUI(UI.Runner runner) {
+            super(new DummyPanel(), Coord.of(10, 10), runner);
         }
 
         @Override
@@ -104,22 +108,19 @@ class PUILifecycleTest {
         }
     }
 
-    private static final class SessionRunner implements UI.Runner {
-        private final Session sess;
+    private static final class EarlyGobCreatingRemoteUI extends RemoteUI {
+        private final long gobId;
+        private Gob createdGob;
 
-        private SessionRunner(Session sess) {
-            this.sess = sess;
-        }
-
-        @Override
-        public UI.Runner run(UI ui) {
-            return null;
+        private EarlyGobCreatingRemoteUI(Session sess, long gobId) {
+            super(sess);
+            this.gobId = gobId;
         }
 
         @Override
         public void init(UI ui) {
-            ui.sess = sess;
-            sess.ui = ui;
+            super.init(ui);
+            createdGob = createGob(sess, gobId);
         }
     }
 
@@ -182,6 +183,23 @@ class PUILifecycleTest {
         Field field = owner.getDeclaredField(name);
         field.setAccessible(true);
         field.set(target, value);
+    }
+
+    private static Gob createGob(Session sess, long id) {
+        sess.glob.oc.receive(new OCache.ObjDelta(0, id, 1));
+        for(int i = 0; i < 100; i++) {
+            Gob gob = sess.glob.oc.getgob(id);
+            if(gob != null) {
+                return gob;
+            }
+            try {
+                Thread.sleep(10);
+            } catch(InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new AssertionError("interrupted while waiting for gob creation", e);
+            }
+        }
+        throw new AssertionError("timed out waiting for gob " + id);
     }
 
     @Test
@@ -250,21 +268,23 @@ class PUILifecycleTest {
     void gobFactoryIsScopedPerSessionAndSurvivesOtherPuiDestroy() {
         Session firstSession = session("first");
         Session secondSession = session("second");
-        PUI first = new TestPUI(firstSession);
-        PUI second = new TestPUI(secondSession);
+        EarlyGobCreatingRemoteUI firstRunner = new EarlyGobCreatingRemoteUI(firstSession, 1L);
+        EarlyGobCreatingRemoteUI secondRunner = new EarlyGobCreatingRemoteUI(secondSession, 2L);
+        PUI first = new TestPUI(firstRunner);
+        PUI second = new TestPUI(secondRunner);
 
         try {
             assertInstanceOf(PGob.class,
-                    firstSession.glob.gobFactory.create(firstSession.glob, Coord2d.z, 1L),
-                    "PUI must bind PGob creation onto its own session glob");
+                    firstRunner.createdGob,
+                    "remote session gob creation during UI init must use the session gob factory");
             assertInstanceOf(PGob.class,
-                    secondSession.glob.gobFactory.create(secondSession.glob, Coord2d.z, 2L),
-                    "each session must keep its own PGob factory");
+                    secondRunner.createdGob,
+                    "each session must keep its own gob creation path");
 
             first.destroy();
 
             assertInstanceOf(PGob.class,
-                    secondSession.glob.gobFactory.create(secondSession.glob, Coord2d.z, 3L),
+                    createGob(secondSession, 3L),
                     "destroying one PUI must not reset gob creation for another live session");
         } finally {
             second.destroy();

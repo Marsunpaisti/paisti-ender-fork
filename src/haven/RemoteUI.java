@@ -27,6 +27,7 @@
 package haven;
 
 import java.util.*;
+import paisti.client.PUI;
 
 public class RemoteUI implements UI.Receiver, UI.Runner {
     public final Session sess;
@@ -148,7 +149,12 @@ public class RemoteUI implements UI.Receiver, UI.Runner {
 
     public void init(UI ui) {
 	ui.sess = sess;
-	if(sess != null) {sess.ui = ui;}
+	if(sess != null) {
+	    sess.ui = ui;
+	    if(ui instanceof PUI) {
+		PUI.bindGobFactory(sess);
+	    }
+	}
     }
 
     public String title() {
