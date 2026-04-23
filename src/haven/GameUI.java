@@ -26,6 +26,7 @@
 
 package haven;
 
+import haven.session.SessionManager;
 import haven.Equipory.SLOTS;
 import haven.res.ui.locptr.Pointer;
 import haven.rx.BuffToggles;
@@ -1795,6 +1796,8 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
     public static final KeyBinding kb_hide = KeyBinding.get("ui-toggle", KeyMatch.nil);
     public static final KeyBinding kb_logout = KeyBinding.get("logout", KeyMatch.nil);
     public static final KeyBinding kb_switchchr = KeyBinding.get("logout-cs", KeyMatch.nil);
+    public static final KeyBinding kb_switchsession = KeyBinding.get("session-next", KeyMatch.forcode(KeyEvent.VK_TAB, KeyMatch.M));
+    public static final KeyBinding kb_addaccount = KeyBinding.get("session-add", KeyMatch.forchar('N', KeyMatch.M));
     public boolean globtype(GlobKeyEvent ev) {
 	if(ev.c == ':') {
 	    entercmd();
@@ -1810,6 +1813,12 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
 	    return(true);
 	} else if(kb_switchchr.key().match(ev)) {
 	    act("lo", "cs");
+	    return(true);
+	} else if(kb_switchsession.key().match(ev)) {
+	    SessionManager.getInstance().switchToNext();
+	    return(true);
+	} else if(kb_addaccount.key().match(ev)) {
+	    SessionManager.getInstance().requestAddAccount();
 	    return(true);
 	} else if(kb_chat.key().match(ev)) {
 	    toggleChat();
