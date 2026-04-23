@@ -58,7 +58,15 @@ public class SessionManager {
         if(idx < 0) {
             idx = 0;
         }
-        activeSession = sessions.get((idx + 1) % sessions.size());
+        int size = sessions.size();
+        for(int i = 1; i <= size; i++) {
+            SessionContext candidate = sessions.get((idx + i) % size);
+            if(candidate.isAlive()) {
+                activeSession = candidate;
+                return;
+            }
+        }
+        /* All sessions are dead/retiring — leave activeSession as-is */
     }
 
     /**
@@ -86,6 +94,10 @@ public class SessionManager {
 
     public void waitForAddRequest() throws InterruptedException {
         addAccountSignal.acquire();
+        /* Drain any extra permits that accumulated from repeated
+         * requestAddAccount() calls, so we process exactly one
+         * add-account cycle per wakeup. */
+        addAccountSignal.drainPermits();
     }
 
     public void pruneDeadSessions() {

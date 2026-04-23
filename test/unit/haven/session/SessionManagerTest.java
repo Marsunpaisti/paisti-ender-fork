@@ -338,4 +338,68 @@ class SessionManagerTest {
         waiter.join(2000);
         assertFalse(waiter.isAlive(), "waiter thread should finish after the add-account signal");
     }
+
+    @Test
+    @Tag("unit")
+    void switchToNextSkipsDeadSessions() {
+        SessionManager manager = SessionManager.getInstance();
+        reset(manager);
+        SessionFixture first = newContext("first");
+        SessionFixture second = newContext("second");
+        SessionFixture third = newContext("third");
+
+        manager.addSession(first.context);
+        manager.addSession(second.context);
+        manager.addSession(third.context);
+
+        // active is third (last added). Kill first so it's dead.
+        first.context.session.close();
+        first.transport.fireClosed();
+
+        // Force active to third, then switchToNext should skip dead first and land on second
+        // third -> (first is dead, skip) -> second
+        // But active is third (index 2), next would be first (index 0) which is dead, so skip to second (index 1)
+        manager.switchToNext();
+        assertSame(second.context, manager.getActiveSession(),
+            "switchToNext must skip dead sessions and advance to the next live one");
+
+        reset(manager);
+    }
+
+    @Test
+    @Tag("unit")
+    void repeatedRequestAddAccountDoesNotLeaveStalePermits() throws Exception {
+        SessionManager manager = SessionManager.getInstance();
+        reset(manager);
+
+        // Fire multiple requests before anyone waits
+        manager.requestAddAccount();
+        manager.requestAddAccount();
+        manager.requestAddAccount();
+
+        CountDownLatch firstWake = new CountDownLatch(1);
+        CountDownLatch secondWakeAttempt = new CountDownLatch(1);
+
+        Thread waiter = new Thread(() -> {
+            try {
+                manager.waitForAddRequest();
+                firstWake.countDown();
+                // Second wait should block (no stale permits)
+                // We use a timeout to detect blocking
+                manager.waitForAddRequest();
+                secondWakeAttempt.countDown();
+            } catch(InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
+        waiter.start();
+
+        assertTrue(firstWake.await(2, TimeUnit.SECONDS), "first waitForAddRequest must wake up");
+        // The second wait should NOT immediately succeed (stale permits drained)
+        assertFalse(secondWakeAttempt.await(500, TimeUnit.MILLISECONDS),
+            "waitForAddRequest must drain stale permits so a second wait blocks");
+
+        waiter.interrupt();
+        waiter.join(2000);
+    }
 }

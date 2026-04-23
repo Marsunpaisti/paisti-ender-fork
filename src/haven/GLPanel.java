@@ -501,6 +501,8 @@ public interface GLPanel extends UIPanel, UI.Context {
 		    }
 
 		    int cfno = frameno++;
+		    /* Prune dead/terminal sessions before ticking */
+		    SessionManager.getInstance().pruneDeadSessions();
 		    /* Service background sessions */
 		    tickBackgroundSessions(ui);
 		    /* Service the visible session's message queue; if it was
