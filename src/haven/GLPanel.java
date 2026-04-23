@@ -32,6 +32,9 @@ import haven.render.gl.*;
 import java.awt.Cursor;
 import java.awt.Toolkit;
 import haven.JOGLPanel.SyncMode;
+import haven.session.LobbyRunner;
+import haven.session.SessionContext;
+import haven.session.SessionManager;
 import paisti.client.PUI;
 
 public interface GLPanel extends UIPanel, UI.Context {
@@ -72,7 +75,7 @@ public interface GLPanel extends UIPanel, UI.Context {
 		lastui = this.ui;
 		this.ui = null;
 	    }
-	    if(lastui != null) {
+	    if(lastui != null && !SessionManager.getInstance().isSessionUi(lastui)) {
 		synchronized(lastui) {
 		    lastui.destroy();
 		}
@@ -339,6 +342,38 @@ public interface GLPanel extends UIPanel, UI.Context {
 	    }
 	}
 
+	/**
+	 * Poll and dispatch UI messages for all registered sessions whose UI
+	 * is not the currently visible one, then CPU-tick them.
+	 */
+	private void tickBackgroundSessions(UI visibleUi) {
+	    for(SessionContext ctx : SessionManager.getInstance().getSessions()) {
+		UI sui = ctx.ui;
+		if(sui == null || sui == visibleUi)
+		    continue;
+		synchronized(sui) {
+		    /* Dispatch queued server messages */
+		    if(ctx.session != null && ctx.remoteUI != null) {
+			PMessage msg;
+			while((msg = ctx.session.pollUIMsg()) != null) {
+			    try {
+				if(!ctx.remoteUI.dispatchMessage(msg, sui))
+				    break;
+			    } catch(InterruptedException e) {
+				Thread.currentThread().interrupt();
+				return;
+			    }
+			}
+		    }
+		    /* CPU-tick */
+		    if(sui.sess != null && sui.sess.glob != null) {
+			sui.sess.glob.ctick();
+		    }
+		    sui.tick();
+		}
+	    }
+	}
+
 	public void run() throws InterruptedException {
 	    GLRender buf = null;
 	    try {
@@ -382,6 +417,9 @@ public interface GLPanel extends UIPanel, UI.Context {
 		    }
 
 		    int cfno = frameno++;
+		    /* Tick background sessions: poll/dispatch UI messages & CPU-tick */
+		    tickBackgroundSessions(ui);
+
 		    synchronized(ui) {
 			CPUProfile.phase(curf, "dsp");
 			ed.dispatch(ui);
@@ -478,6 +516,17 @@ public interface GLPanel extends UIPanel, UI.Context {
 	}
 
 	public UI newui(UI.Runner fun) {
+	    SessionManager mgr = SessionManager.getInstance();
+
+	    /* If transitioning to LobbyRunner and the active session's UI is
+	     * our current UI, reuse it instead of creating a throwaway. */
+	    if(fun instanceof LobbyRunner) {
+		SessionContext active = mgr.getActiveSession();
+		if(active != null && active.ui == this.ui) {
+		    return(this.ui);
+		}
+	    }
+
 	    UI prevui, newui = makeui(fun);
 	    newui.env = p.env();
 	    if(p.getParent() instanceof Console.Directory)
@@ -500,7 +549,9 @@ public interface GLPanel extends UIPanel, UI.Context {
 		    }
 		}
 	    }
-	    if(prevui != null) {
+	    /* Do not destroy a UI that is registered with SessionManager;
+	     * its SessionContext owns the lifecycle via dispose(). */
+	    if(prevui != null && !mgr.isSessionUi(prevui)) {
 		synchronized(prevui) {
 		    prevui.destroy();
 		}

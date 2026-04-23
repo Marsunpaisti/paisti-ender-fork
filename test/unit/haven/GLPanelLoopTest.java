@@ -2,7 +2,12 @@ package haven;
 
 import haven.render.Pipe;
 import haven.render.gl.GLEnvironment;
+import haven.session.LobbyRunner;
+import haven.session.SessionContext;
+import haven.session.SessionManager;
 import me.ender.gob.GobEffects;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
@@ -73,7 +78,11 @@ class GLPanelLoopTest {
         private int destroyCalls;
 
         private TrackingUI(GLPanel panel) {
-            super(panel, Coord.of(10, 10), null);
+            this(panel, null);
+        }
+
+        private TrackingUI(GLPanel panel, UI.Runner fun) {
+            super(panel, Coord.of(10, 10), fun);
         }
 
         @Override
@@ -98,11 +107,35 @@ class GLPanelLoopTest {
 
         @Override
         protected UI makeui(UI.Runner fun) {
-            return new TrackingUI(panel);
+            return new TrackingUI(panel, fun);
         }
 
         private TrackingUI currentUi() {
             return (TrackingUI) ui;
+        }
+    }
+
+    @BeforeEach
+    void clearSessionManager() {
+        clearSessions();
+    }
+
+    @AfterEach
+    void restoreSessionManager() {
+        clearSessions();
+    }
+
+    private void clearSessions() {
+        SessionManager mgr = SessionManager.getInstance();
+        try {
+            java.lang.reflect.Field field = SessionManager.class.getDeclaredField("sessions");
+            field.setAccessible(true);
+            ((java.util.List<?>)field.get(mgr)).clear();
+            java.lang.reflect.Field activeField = SessionManager.class.getDeclaredField("activeSession");
+            activeField.setAccessible(true);
+            activeField.set(mgr, null);
+        } catch(Exception e) {
+            throw new RuntimeException(e);
         }
     }
 
@@ -122,5 +155,46 @@ class GLPanelLoopTest {
         loop.newui(null);
 
         assertEquals(1, first.destroyCalls, "newui() after teardown must not destroy the old UI a second time");
+    }
+
+    @Test
+    @Tag("unit")
+    void newuiWithLoginDoesNotDestroyRegisteredSessionUi() {
+        DummyPanel panel = new DummyPanel();
+        TestLoop loop = new TestLoop(panel);
+
+        // Simulate a session UI being created and registered
+        TrackingUI sessionUi = (TrackingUI) loop.newui(null);
+        SessionManager mgr = SessionManager.getInstance();
+        // Register this UI as a session UI (simulating what SessionRunner does)
+        mgr.addSession(new SessionContext(null, sessionUi, null));
+
+        // Now open a login UI (e.g. Bootstrap) — this should NOT destroy the session UI
+        TrackingUI loginUi = (TrackingUI) loop.newui(new Bootstrap());
+
+        assertEquals(0, sessionUi.destroyCalls,
+            "opening a login UI must not destroy a registered session UI");
+        assertNotSame(sessionUi, loginUi,
+            "login UI should be a new UI instance");
+    }
+
+    @Test
+    @Tag("unit")
+    void newuiWithLobbyRunnerReusesActiveSessionUi() {
+        DummyPanel panel = new DummyPanel();
+        TestLoop loop = new TestLoop(panel);
+
+        // Simulate: session UI is active and registered
+        TrackingUI sessionUi = (TrackingUI) loop.newui(null);
+        SessionManager mgr = SessionManager.getInstance();
+        mgr.addSession(new SessionContext(null, sessionUi, null));
+
+        // Transition to LobbyRunner — should reuse the active session UI, not create a new one
+        UI lobbyUi = loop.newui(new LobbyRunner());
+
+        assertSame(sessionUi, lobbyUi,
+            "newui(LobbyRunner) should reuse the active session UI instead of creating a throwaway");
+        assertEquals(0, sessionUi.destroyCalls,
+            "session UI must not be destroyed during LobbyRunner transition");
     }
 }
