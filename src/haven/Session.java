@@ -79,6 +79,7 @@ public class Session implements Resource.Resolver {
     public SignKey sesskey;
     public final CharacterInfo character;
     public UI ui;
+    private boolean closing = false;
     private volatile boolean closed = false;
     private int localCacheId = -1;
 
@@ -333,10 +334,7 @@ public class Session implements Resource.Resolver {
 
     private final Transport.Callback conncb = new Transport.Callback() {
 	    public void closed() {
-		synchronized(uimsgs) {
-		    closed = true;
-		    uimsgs.notifyAll();
-		}
+		shutdown(true);
 	    }
 
 	    public void handle(PMessage msg) {
@@ -380,13 +378,22 @@ public class Session implements Resource.Resolver {
 	return(sess);
     }
 
-    public void close() {
+    private boolean shutdown(boolean initiate) {
 	synchronized(uimsgs) {
-	    closed = true;
+	    boolean first = initiate && !closing;
+	    if(initiate)
+		closing = true;
+	    closed = closing && uimsgs.isEmpty();
 	    uimsgs.notifyAll();
+	    return(first);
 	}
-	conn.close();
-	glob.oc.destroy();
+    }
+
+    public void close() {
+	if(shutdown(true)) {
+	    conn.close();
+	    glob.oc.destroy();
+	}
     }
 
     public void queuemsg(PMessage pmsg) {
@@ -396,6 +403,7 @@ public class Session implements Resource.Resolver {
     public void postuimsg(PMessage msg) {
 	synchronized(uimsgs) {
 	    uimsgs.add(msg);
+	    closed = false;
 	    uimsgs.notifyAll();
 	}
     }
@@ -403,8 +411,11 @@ public class Session implements Resource.Resolver {
     public PMessage getuimsg() throws InterruptedException {
 	synchronized(uimsgs) {
 	    while(true) {
-		if(!uimsgs.isEmpty())
-		    return(uimsgs.remove());
+		if(!uimsgs.isEmpty()) {
+		    PMessage msg = uimsgs.remove();
+		    shutdown(false);
+		    return(msg);
+		}
 		if(closed)
 		    return(null);
 		uimsgs.wait();
@@ -416,10 +427,13 @@ public class Session implements Resource.Resolver {
 	synchronized(uimsgs) {
 	    if(uimsgs.isEmpty())
 		return(null);
-	    return(uimsgs.remove());
+	    PMessage msg = uimsgs.remove();
+	    shutdown(false);
+	    return(msg);
 	}
     }
 
+    /* True once shutdown has started and no UI messages remain to drain. */
     public boolean isClosed() {
 	return(closed);
     }

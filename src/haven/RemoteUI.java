@@ -157,7 +157,7 @@ public class RemoteUI implements UI.Receiver, UI.Runner {
 	    }
 	} finally {
 	    sess.close();
-	    while(sess.getuimsg() != null);
+	    while(sess.pollUIMsg() != null);
 	}
     }
 

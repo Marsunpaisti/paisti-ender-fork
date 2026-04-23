@@ -19,11 +19,14 @@ import static org.junit.jupiter.api.Assertions.*;
 class RemoteUITest {
     private static final class DummyTransport implements Transport {
         private boolean closed;
+        private int closeCalls;
         private final Collection<PMessage> queuedMessages = new ArrayList<>();
+        private final Collection<Callback> callbacks = new ArrayList<>();
 
         @Override
         public void close() {
             closed = true;
+            closeCalls++;
         }
 
         @Override
@@ -37,8 +40,10 @@ class RemoteUITest {
 
         @Override
         public Transport add(Callback cb) {
+            callbacks.add(cb);
             return this;
         }
+
     }
 
     private static final class DummyPanel extends Canvas implements GLPanel {
@@ -221,13 +226,30 @@ class RemoteUITest {
     @Tag("unit")
     void isClosedBecomesTrueWhenSessionIsClosed() {
         SessionFixture fixture = newSessionFixture();
+        PMessage msg = new PMessage(RMessage.RMSG_DSTWDG);
+        msg.addint32(77);
 
         assertFalse(fixture.session.isClosed(), "sanity check: fresh test session should start open");
 
+        fixture.session.postuimsg(incoming(msg));
         fixture.session.close();
 
-        assertTrue(fixture.session.isClosed(), "close() must make isClosed() report true immediately");
+        assertFalse(fixture.session.isClosed(), "close() must not report terminal closure while queued UI messages remain");
+        assertEquals(incoming(msg), fixture.session.pollUIMsg(), "close() must leave queued UI messages available for draining");
+        assertTrue(fixture.session.isClosed(), "isClosed() must become true once shutdown has started and the queue is drained");
         assertTrue(fixture.transport.closed, "close() must still close the underlying transport");
+    }
+
+    @Test
+    @Tag("unit")
+    void closeIsIdempotentAcrossRepeatedShutdownCalls() {
+        SessionFixture fixture = newSessionFixture();
+
+        fixture.session.close();
+        fixture.session.close();
+
+        assertTrue(fixture.session.isClosed(), "session should remain terminally closed after repeated shutdown signals");
+        assertEquals(1, fixture.transport.closeCalls, "close() must only close the transport once");
     }
 
     @Test
