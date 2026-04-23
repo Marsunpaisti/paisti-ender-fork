@@ -1,6 +1,6 @@
 package paisti.plugin.overlay;
 
-import haven.PaistiServices;
+import paisti.client.PaistiServices;
 import haven.PView;
 import haven.Coord;
 import haven.Coord2d;
@@ -572,7 +572,7 @@ class OverlayManagerTest {
 
         TestRenderTreeSlot firstSlot = firstMap.lastSlot;
         setRootMap(ui, secondMap);
-        ui.setGUI(null);
+        manager.syncMapOverlayAttachment();
 
         assertTrue(firstSlot.removed, "expected UI.setGUI(...) to remove the stale bridge slot when the current map changes inside one UI");
         assertSame(secondMap, attachedMap(manager), "expected UI.setGUI(...) to attach the bridge to the replacement map immediately");
@@ -592,7 +592,7 @@ class OverlayManagerTest {
 
         TestRenderTreeSlot slot = map.lastSlot;
         setRootMap(ui, null);
-        ui.clearGUI(null);
+        manager.syncMapOverlayAttachment();
 
         assertNull(attachedMap(manager), "expected UI.clearGUI(...) to detach the active map bridge when the UI no longer exposes a map");
         assertNull(mapSlot(manager), "expected UI.clearGUI(...) to clear the active map slot immediately");
@@ -986,7 +986,6 @@ class OverlayManagerTest {
 
     private static UI fakeUi(PaistiServices services) throws Exception {
         UI ui = allocate(UI.class);
-        setField(UI.class, ui, "paistiServices", services);
         setField(UI.class, ui, "guiLock", new Object());
         setField(UI.class, ui, "audio", new ActAudio.Root());
         setField(UI.class, ui, "root", new TestRootWidget(ui));
