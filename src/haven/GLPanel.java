@@ -67,7 +67,11 @@ public interface GLPanel extends UIPanel, UI.Context {
 	}
 
 	private void onLoopTeardown() {
-	    UI lastui = this.ui;
+	    UI lastui;
+	    synchronized(uilock) {
+		lastui = this.ui;
+		this.ui = null;
+	    }
 	    if(lastui != null) {
 		synchronized(lastui) {
 		    lastui.destroy();
