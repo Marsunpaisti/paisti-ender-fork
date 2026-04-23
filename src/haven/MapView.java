@@ -51,6 +51,8 @@ import haven.rx.Reactor;
 import me.ender.ChatCommands;
 import me.ender.CustomCursors;
 import me.ender.minimap.Minesweeper;
+import paisti.client.PUI;
+import paisti.client.PMapView;
 
 public class MapView extends PView implements DTarget, Console.Directory {
     public static boolean clickdb = false;
@@ -667,7 +669,7 @@ public class MapView extends PView implements DTarget, Console.Directory {
 	    long pgob = -1;
 	    if(args.length > 2)
 		pgob = Utils.uiv(args[2]);
-	    return(new MapView(sz, ui.sess.glob, mc, pgob));
+	    return(new PMapView(sz, ui.sess.glob, mc, pgob));
 	}
     }
     
@@ -700,8 +702,8 @@ public class MapView extends PView implements DTarget, Console.Directory {
 	@Override
 	protected void attached() {
 	    super.attached();
-	    if((ui != null) && (ui.services() != null)) {
-		ui.services().overlayManager().syncMapOverlayAttachment();
+	    if(ui instanceof PUI) {
+		PUI.of(ui).overlayManager().syncMapOverlayAttachment();
 	    }
 	}
      

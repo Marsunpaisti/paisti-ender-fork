@@ -36,6 +36,7 @@ import me.ender.QuestHelper;
 import me.ender.StatMeterWdg;
 import me.ender.minimap.*;
 import me.ender.timer.Timer;
+import paisti.client.PGameUI;
 
 import java.util.*;
 import java.awt.Color;
@@ -290,7 +291,7 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
 	    String genus = "";
 	    if(args.length > 2)
 		genus = (String)args[2];
-	    GameUI gui = new GameUI(chrid, plid, genus);
+	    GameUI gui = new PGameUI(chrid, plid, genus);
 	    ui.setGUI(gui);
 	    return gui;
 	}
