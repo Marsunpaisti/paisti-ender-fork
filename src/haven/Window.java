@@ -31,8 +31,6 @@ import me.ender.WindowDetector;
 
 import java.awt.*;
 import haven.render.*;
-
-
 import java.util.function.*;
 import java.awt.Color;
 import java.awt.image.BufferedImage;
@@ -84,7 +82,6 @@ public class Window extends Widget {
 	Resource.loadsimg("gfx/hud/wnd/lg/cbtnh")};
     
     public static final String ON_DESTROY = "destroy";
-    public static final String ON_SHOW = "show";
     public static final String ON_PACK = "pack";
     
     public Deco deco;
@@ -515,15 +512,9 @@ public class Window extends Widget {
 	resize2(sz);
     }
 
-    @Override
-    public void pack() {
-	super.pack();
-	report(ON_PACK);
-
-    }
-
     public void uimsg(String msg, Object... args) {
 	if(msg == "pack") {
+	    report(ON_PACK);
 	    pack();
 	} else if(msg == "cap") {
 	    String cap = (String)args[0];
@@ -686,26 +677,22 @@ public class Window extends Widget {
     }
 
     public void show() {
-	boolean wasVisible = visible();
 	if(parent == null) {
 	    super.show();
-	} else {
-	    if(!visible)
-		super.show();
-	    if(animst == null) {
-		anim = trans.show(this, null);
-		animst = "show";
-	    } else if(animst == "show") {
-	    } else if(animst == "hide") {
-		anim = show0(trans, anim);
-		animst = "show";
-	    } else if(animst == "dest") {
-	    } else {
-		throw(new AssertionError(animst));
-	    }
+	    return;
 	}
-	if(!wasVisible && visible()) {
-	    report(ON_SHOW);
+	if(!visible)
+	    super.show();
+	if(animst == null) {
+	    anim = trans.show(this, null);
+	    animst = "show";
+	} else if(animst == "show") {
+	} else if(animst == "hide") {
+	    anim = show0(trans, anim);
+	    animst = "show";
+	} else if(animst == "dest") {
+	} else {
+	    throw(new AssertionError(animst));
 	}
     }
 
