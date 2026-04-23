@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import sun.misc.Unsafe;
 
 import java.awt.Canvas;
+import java.lang.reflect.Constructor;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedList;
@@ -20,6 +21,7 @@ class RemoteUITest {
     private static final class DummyTransport implements Transport {
         private boolean closed;
         private int closeCalls;
+        private boolean closeSignalsTransport;
         private final Collection<PMessage> queuedMessages = new ArrayList<>();
         private final Collection<Callback> callbacks = new ArrayList<>();
 
@@ -27,6 +29,9 @@ class RemoteUITest {
         public void close() {
             closed = true;
             closeCalls++;
+            if(closeSignalsTransport) {
+                fireClosed();
+            }
         }
 
         @Override
@@ -42,6 +47,12 @@ class RemoteUITest {
         public Transport add(Callback cb) {
             callbacks.add(cb);
             return this;
+        }
+
+        private void fireClosed() {
+            for(Callback callback : callbacks) {
+                callback.closed();
+            }
         }
 
     }
@@ -176,6 +187,9 @@ class RemoteUITest {
             setField(Session.class, session, "rescache", new TreeMap<Integer, Session.CachedRes>());
             setField(Session.class, session, "resmapper", new ResID.ResolveMapper(session));
             setField(Session.class, session, "glob", new Glob(session));
+            Transport.Callback conncb = newConncb(session);
+            setField(Session.class, session, "conncb", conncb);
+            fixture.transport.add(conncb);
             return fixture;
         } catch(Exception e) {
             throw new RuntimeException(e);
@@ -197,6 +211,12 @@ class RemoteUITest {
         Field field = owner.getDeclaredField(name);
         field.setAccessible(true);
         field.set(target, value);
+    }
+
+    private static Transport.Callback newConncb(Session session) throws Exception {
+        Constructor<?> ctor = Class.forName("haven.Session$1").getDeclaredConstructor(Session.class);
+        ctor.setAccessible(true);
+        return (Transport.Callback) ctor.newInstance(session);
     }
 
     private static PMessage incoming(PMessage msg) {
@@ -224,7 +244,7 @@ class RemoteUITest {
 
     @Test
     @Tag("unit")
-    void isClosedBecomesTrueWhenSessionIsClosed() {
+    void closeRequestWaitsForTransportClosureAndQueueDrain() {
         SessionFixture fixture = newSessionFixture();
         PMessage msg = new PMessage(RMessage.RMSG_DSTWDG);
         msg.addint32(77);
@@ -234,9 +254,11 @@ class RemoteUITest {
         fixture.session.postuimsg(incoming(msg));
         fixture.session.close();
 
-        assertFalse(fixture.session.isClosed(), "close() must not report terminal closure while queued UI messages remain");
+        assertFalse(fixture.session.isClosed(), "close() must not report terminal closure before transport closure");
         assertEquals(incoming(msg), fixture.session.pollUIMsg(), "close() must leave queued UI messages available for draining");
-        assertTrue(fixture.session.isClosed(), "isClosed() must become true once shutdown has started and the queue is drained");
+        assertFalse(fixture.session.isClosed(), "draining alone must not make the session terminal before transport closure");
+        fixture.transport.fireClosed();
+        assertTrue(fixture.session.isClosed(), "isClosed() must become true after transport closure and queue drain");
         assertTrue(fixture.transport.closed, "close() must still close the underlying transport");
     }
 
@@ -244,12 +266,32 @@ class RemoteUITest {
     @Tag("unit")
     void closeIsIdempotentAcrossRepeatedShutdownCalls() {
         SessionFixture fixture = newSessionFixture();
+        fixture.transport.closeSignalsTransport = true;
 
         fixture.session.close();
         fixture.session.close();
 
         assertTrue(fixture.session.isClosed(), "session should remain terminally closed after repeated shutdown signals");
         assertEquals(1, fixture.transport.closeCalls, "close() must only close the transport once");
+    }
+
+    @Test
+    @Tag("unit")
+    void lateUiMessagesAfterTransportClosureReopenUntilDrainedAgain() {
+        SessionFixture fixture = newSessionFixture();
+        PMessage msg = new PMessage(RMessage.RMSG_DSTWDG);
+        msg.addint32(91);
+
+        fixture.transport.closeSignalsTransport = true;
+        fixture.session.close();
+
+        assertTrue(fixture.session.isClosed(), "sanity check: auto-signaled transport closure should reach terminal state with an empty queue");
+
+        fixture.session.postuimsg(incoming(msg));
+
+        assertFalse(fixture.session.isClosed(), "late UI messages must temporarily reopen terminal closure state until drained");
+        assertEquals(incoming(msg), fixture.session.pollUIMsg(), "late UI messages must still be drainable after shutdown");
+        assertTrue(fixture.session.isClosed(), "terminal closure must return once the late UI message is drained");
     }
 
     @Test

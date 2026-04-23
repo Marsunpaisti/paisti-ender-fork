@@ -79,7 +79,9 @@ public class Session implements Resource.Resolver {
     public SignKey sesskey;
     public final CharacterInfo character;
     public UI ui;
-    private boolean closing = false;
+    private boolean closereq = false;
+    private boolean connclosed = false;
+    private boolean cleaned = false;
     private volatile boolean closed = false;
     private int localCacheId = -1;
 
@@ -334,7 +336,8 @@ public class Session implements Resource.Resolver {
 
     private final Transport.Callback conncb = new Transport.Callback() {
 	    public void closed() {
-		shutdown(true);
+		if((shutdown(false, true) & 2) != 0)
+		    glob.oc.destroy();
 	    }
 
 	    public void handle(PMessage msg) {
@@ -378,22 +381,36 @@ public class Session implements Resource.Resolver {
 	return(sess);
     }
 
-    private boolean shutdown(boolean initiate) {
+    private void refreshclosed() {
+	closed = connclosed && uimsgs.isEmpty();
+    }
+
+    private int shutdown(boolean initiate, boolean transport) {
 	synchronized(uimsgs) {
-	    boolean first = initiate && !closing;
-	    if(initiate)
-		closing = true;
-	    closed = closing && uimsgs.isEmpty();
+	    int ret = 0;
+	    if(initiate && !closereq) {
+		closereq = true;
+		if(!connclosed)
+		    ret |= 1;
+	    }
+	    if(transport)
+		connclosed = true;
+	    if((closereq || connclosed) && !cleaned) {
+		cleaned = true;
+		ret |= 2;
+	    }
+	    refreshclosed();
 	    uimsgs.notifyAll();
-	    return(first);
+	    return(ret);
 	}
     }
 
     public void close() {
-	if(shutdown(true)) {
+	int actions = shutdown(true, false);
+	if((actions & 1) != 0)
 	    conn.close();
+	if((actions & 2) != 0)
 	    glob.oc.destroy();
-	}
     }
 
     public void queuemsg(PMessage pmsg) {
@@ -403,7 +420,7 @@ public class Session implements Resource.Resolver {
     public void postuimsg(PMessage msg) {
 	synchronized(uimsgs) {
 	    uimsgs.add(msg);
-	    closed = false;
+	    refreshclosed();
 	    uimsgs.notifyAll();
 	}
     }
@@ -413,7 +430,7 @@ public class Session implements Resource.Resolver {
 	    while(true) {
 		if(!uimsgs.isEmpty()) {
 		    PMessage msg = uimsgs.remove();
-		    shutdown(false);
+		    refreshclosed();
 		    return(msg);
 		}
 		if(closed)
@@ -428,7 +445,7 @@ public class Session implements Resource.Resolver {
 	    if(uimsgs.isEmpty())
 		return(null);
 	    PMessage msg = uimsgs.remove();
-	    shutdown(false);
+	    refreshclosed();
 	    return(msg);
 	}
     }
