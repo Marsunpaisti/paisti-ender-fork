@@ -415,24 +415,41 @@ public interface GLPanel extends UIPanel, UI.Context {
 		while((msg = ctx.session.pollUIMsg()) != null) {
 		    if(msg instanceof RemoteUI.Return) {
 			Session returned = ((RemoteUI.Return)msg).ret;
-			if(returned != null) {
-			    try { returned.close(); } catch(Exception e) { new Warning(e, "closing leaked Return session").issue(); }
-			}
-			/* Initiate shutdown but do NOT remove/dispose —
-			 * pruneDeadSessions owns final teardown. */
+			/* Initiate shutdown on the old session */
 			ctx.close();
-			/* Ensure activeSession no longer points at this
-			 * retiring context so the next-frame uilock sync
-			 * does not rebind to it. */
 			mgr.retireActive(ctx);
-			/* Switch this.ui to the new active session if one
-			 * exists, otherwise wake the login flow. */
-			synchronized(uilock) {
-			    SessionContext next = mgr.getActiveSession();
-			    if(next != null && next.ui != null) {
-				this.ui = next.ui;
-			    } else {
-				mgr.requestAddAccount();
+
+			if(returned != null) {
+			    /* Transition: build a replacement context for
+			     * the returned session, mirroring newui() and
+			     * SessionRunner.run() setup. */
+			    RemoteUI newRemote = new RemoteUI(returned);
+			    UI newUi = makeui(newRemote);
+			    newUi.env = p.env();
+			    if(p.getParent() instanceof Console.Directory)
+				newUi.cons.add((Console.Directory)p.getParent());
+			    if(p instanceof Console.Directory)
+				newUi.cons.add((Console.Directory)p);
+			    newUi.cons.add(this);
+			    newUi.root.guprof = uprof;
+			    newUi.root.grprof = rprof;
+			    newUi.root.ggprof = gprof;
+			    newRemote.attach(newUi);
+			    newRemote.init(newUi);
+			    mgr.addSession(new SessionContext(returned, newUi, newRemote));
+			    synchronized(uilock) {
+				this.ui = newUi;
+			    }
+			} else {
+			    /* Null returned session — fall back to next
+			     * live session or wake login flow. */
+			    synchronized(uilock) {
+				SessionContext next = mgr.getActiveSession();
+				if(next != null && next.ui != null) {
+				    this.ui = next.ui;
+				} else {
+				    mgr.requestAddAccount();
+				}
 			    }
 			}
 			return(false);

@@ -368,7 +368,7 @@ class GLPanelLoopTest {
 
     @Test
     @Tag("unit")
-    void visibleSessionReturnInitiatesShutdownAndSkipsFrame() throws Exception {
+    void visibleSessionReturnTransitionsToReturnedSession() throws Exception {
         DummyPanel panel = new DummyPanel();
         TestLoop loop = new TestLoop(panel);
         SessionManager mgr = SessionManager.getInstance();
@@ -392,33 +392,61 @@ class GLPanelLoopTest {
         assertFalse(alive,
             "serviceVisibleSession must return false when visible session hits RemoteUI.Return");
 
-        // Context stays registered — not immediately removed/disposed
+        // Old context stays registered — not immediately removed/disposed
         assertTrue(mgr.getSessions().contains(ctx),
-            "visible Return must NOT immediately remove the context");
+            "visible Return must NOT immediately remove the old context");
 
-        // ctx.close() initiated shutdown
+        // ctx.close() initiated shutdown on the OLD session
         Field closereqField = Session.class.getDeclaredField("closereq");
         closereqField.setAccessible(true);
         assertTrue((boolean) closereqField.get(sess),
-            "visible Return must initiate shutdown on the session");
-        assertTrue((boolean) closereqField.get(returnedSess),
-            "returned session must be closed to prevent leaks");
+            "visible Return must initiate shutdown on the old session");
 
-        // UI is NOT destroyed
+        // The returned session must NOT be closed — it was transitioned to
+        assertFalse((boolean) closereqField.get(returnedSess),
+            "returned session must NOT be closed; it is the new active session");
+
+        // A new context for the returned session must be registered
+        SessionContext newCtx = null;
+        for(SessionContext c : mgr.getSessions()) {
+            if(c.session == returnedSess) {
+                newCtx = c;
+                break;
+            }
+        }
+        assertNotNull(newCtx,
+            "a new SessionContext must be registered for the returned session");
+        assertNotNull(newCtx.ui,
+            "the new context must have a UI");
+        assertNotNull(newCtx.remoteUI,
+            "the new context must have a RemoteUI");
+        assertSame(returnedSess, newCtx.remoteUI.sess,
+            "the new RemoteUI must be bound to the returned session");
+
+        // loop.ui must point at the new UI
+        assertSame(newCtx.ui, loop.currentUi(),
+            "loop.ui must switch to the new UI for the returned session");
+
+        // The new UI must have the returned session bound
+        assertSame(returnedSess, loop.currentUi().sess,
+            "the new UI's sess must be the returned session");
+
+        // Old UI is NOT destroyed
         assertEquals(0, sessionUi.destroyCalls,
-            "visible Return must not destroy the UI in the GL loop");
+            "visible Return must not destroy the old UI in the GL loop");
     }
 
     @Test
     @Tag("unit")
-    void visibleSessionReturnSwitchesToNextLiveSession() throws Exception {
+    void visibleSessionReturnTransitionsEvenWithOtherLiveSessions() throws Exception {
         DummyPanel panel = new DummyPanel();
         TestLoop loop = new TestLoop(panel);
         SessionManager mgr = SessionManager.getInstance();
 
         // Set up two sessions; first is visible with Return, second is alive background
         Session sess1 = newStubSession();
-        sess1.postuimsg(new RemoteUI.Return(newStubSession()));
+        Session returnedSess = newStubSession();
+        sess1.postuimsg(new RemoteUI.Return(returnedSess));
         TrackingUI ui1 = (TrackingUI) loop.newui(null);
         sess1.ui = ui1;
         ui1.sess = sess1;
@@ -442,15 +470,19 @@ class GLPanelLoopTest {
         svc.setAccessible(true);
         svc.invoke(loop, ui1);
 
-        // After ctx1 hits Return, this.ui should switch to the live successor (ctx2)
-        assertSame(ui2, loop.currentUi(),
-            "after visible session Return, loop.ui must switch to a live successor session");
+        // loop.ui must now point at the NEW UI for the returned session (not ui2)
+        assertNotSame(ui1, loop.currentUi(),
+            "loop.ui must not remain on the old session's UI");
+        assertNotSame(ui2, loop.currentUi(),
+            "loop.ui must point at the transitioned session's new UI, not the background session");
+        assertSame(returnedSess, loop.currentUi().sess,
+            "loop.ui's session must be the returned session");
 
-        // activeSession must no longer point at the retiring ctx1
+        // activeSession must be the newly created context for the returned session
         assertNotSame(ctx1, mgr.getActiveSession(),
             "getActiveSession must not return the retiring context after Return");
-        assertSame(ctx2, mgr.getActiveSession(),
-            "getActiveSession must point to the live successor");
+        assertSame(returnedSess, mgr.getActiveSession().session,
+            "getActiveSession must point to the returned session's context");
     }
 
     @Test
@@ -462,7 +494,8 @@ class GLPanelLoopTest {
 
         // Set up: visible session hits Return, successor exists
         Session sess1 = newStubSession();
-        sess1.postuimsg(new RemoteUI.Return(newStubSession()));
+        Session returnedSess = newStubSession();
+        sess1.postuimsg(new RemoteUI.Return(returnedSess));
         TrackingUI ui1 = (TrackingUI) loop.newui(null);
         sess1.ui = ui1;
         ui1.sess = sess1;
@@ -485,24 +518,31 @@ class GLPanelLoopTest {
         svc.setAccessible(true);
         svc.invoke(loop, ui1);
 
+        // loop.ui is now the transitioned session's UI
+        UI transitionedUi = loop.currentUi();
+        assertNotSame(ui1, transitionedUi,
+            "loop.ui must not be the retiring session's UI");
+        assertSame(returnedSess, transitionedUi.sess,
+            "loop.ui must be bound to the returned session");
+
         // Now simulate the next frame's uilock sync (from run())
         syncUi(loop, mgr);
 
-        // loop.ui must be ui2, NOT ui1 (the retiring session)
-        assertSame(ui2, loop.currentUi(),
+        // loop.ui must still be the transitioned UI, NOT ui1
+        assertNotSame(ui1, loop.currentUi(),
             "next-frame uilock sync must not rebind to the retiring session");
     }
 
     @Test
     @Tag("unit")
-    void visibleSessionReturnWithNoSuccessorWakesLobby() throws Exception {
+    void visibleSessionReturnWithNullReturnedSessionWakesLobby() throws Exception {
         DummyPanel panel = new DummyPanel();
         TestLoop loop = new TestLoop(panel);
         SessionManager mgr = SessionManager.getInstance();
 
-        // Single session with Return — no successor exists
+        // Single session with Return(null) — no returned session to transition to
         Session sess = newStubSession();
-        sess.postuimsg(new RemoteUI.Return(newStubSession()));
+        sess.postuimsg(new RemoteUI.Return(null));
         TrackingUI sessionUi = (TrackingUI) loop.newui(null);
         sess.ui = sessionUi;
         sessionUi.sess = sess;
@@ -521,11 +561,10 @@ class GLPanelLoopTest {
             "UI must not be destroyed even when no successor exists");
 
         // The add-account signal should have been released (waking LobbyRunner)
-        // Verify by trying to acquire it (non-blocking) — if it was released, this succeeds
         Field addAccountField = SessionManager.class.getDeclaredField("addAccountSignal");
         addAccountField.setAccessible(true);
         java.util.concurrent.Semaphore signal = (java.util.concurrent.Semaphore) addAccountField.get(mgr);
         assertTrue(signal.tryAcquire(),
-            "when no live successor exists, requestAddAccount must be called to wake lobby/login flow");
+            "when returned session is null and no live successor exists, requestAddAccount must be called");
     }
 }
