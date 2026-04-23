@@ -11,7 +11,10 @@
 
 ## MCP Servers
 - Use the ide-index-mcp skill for code navigation and search.
-- 
+
+## References
+- If the user references the Nurgling repository, a local clone of it can be found under C:\Users\kytol\Desktop\Repositories\haven-nurgling2
+
 ## Build And Run
 - This repo is Ant-only.
 - Main commands:
