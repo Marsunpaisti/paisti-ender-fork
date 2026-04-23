@@ -354,15 +354,23 @@ public interface GLPanel extends UIPanel, UI.Context {
 		if(sui == null || sui == visibleUi)
 		    continue;
 		synchronized(sui) {
+		    boolean returnHit = false;
 		    if(ctx.session != null && ctx.remoteUI != null) {
 			PMessage msg;
 			while((msg = ctx.session.pollUIMsg()) != null) {
 			    if(msg instanceof RemoteUI.Return) {
+				/* MVP: session handoff unsupported.  Close
+				 * the returned session to avoid leaks and
+				 * initiate shutdown on this context.  Do NOT
+				 * remove/dispose here — let pruneDeadSessions
+				 * handle final teardown once the session is
+				 * terminal. */
 				Session returned = ((RemoteUI.Return)msg).ret;
 				if(returned != null) {
 				    try { returned.close(); } catch(Exception e) { new Warning(e, "closing leaked Return session").issue(); }
 				}
-				mgr.removeSession(ctx);
+				ctx.close();
+				returnHit = true;
 				break;
 			    }
 			    try {
@@ -374,20 +382,22 @@ public interface GLPanel extends UIPanel, UI.Context {
 			    }
 			}
 		    }
-		    if(sui.sess != null && sui.sess.glob != null) {
-			sui.sess.glob.ctick();
-			sui.sess.glob.map.sendreqs();
+		    /* Skip CPU tick / map requests if this session just hit Return */
+		    if(!returnHit) {
+			if(sui.sess != null && sui.sess.glob != null) {
+			    sui.sess.glob.ctick();
+			    sui.sess.glob.map.sendreqs();
+			}
+			sui.tick();
 		    }
-		    sui.tick();
 		}
 	    }
 	}
 
 	/**
 	 * Service queued UI messages for the visible session if it is a
-	 * managed session.  Returns false if the visible session was
-	 * destroyed (e.g. by RemoteUI.Return) and the caller must skip
-	 * the rest of the frame.
+	 * managed session.  Returns false if the visible session hit a
+	 * Return and the caller must skip the rest of the frame.
 	 */
 	private boolean serviceVisibleSession(UI visibleUi) {
 	    SessionManager mgr = SessionManager.getInstance();
@@ -408,18 +418,27 @@ public interface GLPanel extends UIPanel, UI.Context {
 			if(returned != null) {
 			    try { returned.close(); } catch(Exception e) { new Warning(e, "closing leaked Return session").issue(); }
 			}
-			mgr.removeSession(ctx);
-			/* Switch this.ui to the next active session or leave
-			 * it for the uilock sync at the top of the next
-			 * iteration to resolve. */
+			/* Initiate shutdown but do NOT remove/dispose —
+			 * pruneDeadSessions owns final teardown. */
+			ctx.close();
+			/* Switch this.ui to the next live session if one
+			 * exists, otherwise wake the login flow so the
+			 * loop doesn't keep rendering a closing session. */
 			synchronized(uilock) {
-			    SessionContext next = mgr.getActiveSession();
-			    if(next != null && next.ui != null) {
-				this.ui = next.ui;
+			    boolean switched = false;
+			    for(SessionContext other : mgr.getSessions()) {
+				if(other != ctx && other.ui != null && other.isAlive()) {
+				    this.ui = other.ui;
+				    switched = true;
+				    break;
+				}
 			    }
-			    /* If no session remains, this.ui stays as the
-			     * (now-destroyed) UI; the uilock sync or newui()
-			     * from the runner thread will replace it. */
+			    if(!switched) {
+				/* No live successor — wake the lobby/login
+				 * flow so newui() will replace this.ui on
+				 * the next runner transition. */
+				mgr.requestAddAccount();
+			    }
 			}
 			return(false);
 		    }

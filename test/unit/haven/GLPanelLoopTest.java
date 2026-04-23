@@ -140,6 +140,11 @@ class GLPanelLoopTest {
             java.lang.reflect.Field activeField = SessionManager.class.getDeclaredField("activeSession");
             activeField.setAccessible(true);
             activeField.set(mgr, null);
+            // Drain any add-account signals left by tests
+            java.lang.reflect.Field sigField = SessionManager.class.getDeclaredField("addAccountSignal");
+            sigField.setAccessible(true);
+            java.util.concurrent.Semaphore sig = (java.util.concurrent.Semaphore) sigField.get(mgr);
+            sig.drainPermits();
         } catch(Exception e) {
             throw new RuntimeException(e);
         }
@@ -318,12 +323,12 @@ class GLPanelLoopTest {
 
     @Test
     @Tag("unit")
-    void returnMessageRemovesSessionContextInsteadOfLeaking() throws Exception {
+    void backgroundReturnClosesSessionAndSkipsFrameWork() throws Exception {
         DummyPanel panel = new DummyPanel();
         TestLoop loop = new TestLoop(panel);
         SessionManager mgr = SessionManager.getInstance();
 
-        // Build a real-enough session with a Return message queued
+        // Build a background session with a Return message queued
         Session sess = newStubSession();
         Session returnedSess = newStubSession();
         sess.postuimsg(new RemoteUI.Return(returnedSess));
@@ -335,29 +340,35 @@ class GLPanelLoopTest {
         SessionContext ctx = new SessionContext(sess, sessionUi, remote);
         mgr.addSession(ctx);
 
-        // Use a different visible UI so the session is iterated
+        // Use a different visible UI so the session is iterated as background
         TrackingUI visibleUi = new TrackingUI(panel);
 
         Method tick = GLPanel.Loop.class.getDeclaredMethod("tickBackgroundSessions", UI.class);
         tick.setAccessible(true);
         tick.invoke(loop, visibleUi);
 
-        // The context should have been removed from the manager
-        assertFalse(mgr.getSessions().contains(ctx),
-            "RemoteUI.Return must cause the session context to be removed, not silently lost");
+        // Context stays registered (not removed/disposed) — pruning handles final teardown
+        assertTrue(mgr.getSessions().contains(ctx),
+            "background Return must NOT immediately remove the context; pruneDeadSessions owns that");
 
-        // The returned session should have close() called (closereq set).
-        // Note: isClosed() requires transport-closed AND queue-drained, which
-        // won't happen with a stub transport. Check closereq directly.
+        // ctx.close() was called (session shutdown initiated)
         Field closereqField = Session.class.getDeclaredField("closereq");
         closereqField.setAccessible(true);
+        assertTrue((boolean) closereqField.get(sess),
+            "background Return must initiate shutdown on the current session via ctx.close()");
+
+        // The returned session must have close() called
         assertTrue((boolean) closereqField.get(returnedSess),
-            "The returned session from RemoteUI.Return must have close() called to prevent leaks");
+            "returned session from RemoteUI.Return must be closed to prevent leaks");
+
+        // UI is NOT destroyed (dispose was not called)
+        assertEquals(0, sessionUi.destroyCalls,
+            "background Return must not destroy the UI — pruneDeadSessions owns disposal");
     }
 
     @Test
     @Tag("unit")
-    void visibleSessionReturnDestroysContextAndSkipsFrame() throws Exception {
+    void visibleSessionReturnInitiatesShutdownAndSkipsFrame() throws Exception {
         DummyPanel panel = new DummyPanel();
         TestLoop loop = new TestLoop(panel);
         SessionManager mgr = SessionManager.getInstance();
@@ -374,30 +385,38 @@ class GLPanelLoopTest {
         SessionContext ctx = new SessionContext(sess, sessionUi, remote);
         mgr.addSession(ctx);
 
-        // serviceVisibleSession should return false (session destroyed)
         Method svc = GLPanel.Loop.class.getDeclaredMethod("serviceVisibleSession", UI.class);
         svc.setAccessible(true);
         boolean alive = (boolean) svc.invoke(loop, sessionUi);
 
         assertFalse(alive,
             "serviceVisibleSession must return false when visible session hits RemoteUI.Return");
-        assertFalse(mgr.getSessions().contains(ctx),
-            "visible session context must be removed from manager after Return");
 
+        // Context stays registered — not immediately removed/disposed
+        assertTrue(mgr.getSessions().contains(ctx),
+            "visible Return must NOT immediately remove the context");
+
+        // ctx.close() initiated shutdown
         Field closereqField = Session.class.getDeclaredField("closereq");
         closereqField.setAccessible(true);
+        assertTrue((boolean) closereqField.get(sess),
+            "visible Return must initiate shutdown on the session");
         assertTrue((boolean) closereqField.get(returnedSess),
             "returned session must be closed to prevent leaks");
+
+        // UI is NOT destroyed
+        assertEquals(0, sessionUi.destroyCalls,
+            "visible Return must not destroy the UI in the GL loop");
     }
 
     @Test
     @Tag("unit")
-    void visibleSessionReturnSwitchesToNextActiveSession() throws Exception {
+    void visibleSessionReturnSwitchesToNextLiveSession() throws Exception {
         DummyPanel panel = new DummyPanel();
         TestLoop loop = new TestLoop(panel);
         SessionManager mgr = SessionManager.getInstance();
 
-        // Set up two sessions; first is visible, second is background
+        // Set up two sessions; first is visible with Return, second is alive background
         Session sess1 = newStubSession();
         sess1.postuimsg(new RemoteUI.Return(newStubSession()));
         TrackingUI ui1 = (TrackingUI) loop.newui(null);
@@ -412,10 +431,9 @@ class GLPanelLoopTest {
         sess2.ui = ui2;
         ui2.sess = sess2;
         SessionContext ctx2 = new SessionContext(sess2, ui2, new RemoteUI(sess2));
-        mgr.addSession(ctx2); // ctx2 is now active
+        mgr.addSession(ctx2);
 
-        // Force active back to ctx1 so it's the "visible" one being serviced
-        // (addSession sets active to the last added, so switch)
+        // Force active to ctx1 so it's the visible one being serviced
         Field activeField = SessionManager.class.getDeclaredField("activeSession");
         activeField.setAccessible(true);
         activeField.set(mgr, ctx1);
@@ -424,8 +442,44 @@ class GLPanelLoopTest {
         svc.setAccessible(true);
         svc.invoke(loop, ui1);
 
-        // After ctx1 is removed, this.ui should switch to next active session (ctx2)
+        // After ctx1 hits Return, this.ui should switch to the live successor (ctx2)
         assertSame(ui2, loop.currentUi(),
-            "after visible session Return, loop.ui must switch to the next active session");
+            "after visible session Return, loop.ui must switch to a live successor session");
+    }
+
+    @Test
+    @Tag("unit")
+    void visibleSessionReturnWithNoSuccessorWakesLobby() throws Exception {
+        DummyPanel panel = new DummyPanel();
+        TestLoop loop = new TestLoop(panel);
+        SessionManager mgr = SessionManager.getInstance();
+
+        // Single session with Return — no successor exists
+        Session sess = newStubSession();
+        sess.postuimsg(new RemoteUI.Return(newStubSession()));
+        TrackingUI sessionUi = (TrackingUI) loop.newui(null);
+        sess.ui = sessionUi;
+        sessionUi.sess = sess;
+        RemoteUI remote = new RemoteUI(sess);
+        SessionContext ctx = new SessionContext(sess, sessionUi, remote);
+        mgr.addSession(ctx);
+
+        Method svc = GLPanel.Loop.class.getDeclaredMethod("serviceVisibleSession", UI.class);
+        svc.setAccessible(true);
+        boolean alive = (boolean) svc.invoke(loop, sessionUi);
+
+        assertFalse(alive, "must return false on Return");
+
+        // UI is NOT destroyed — still usable until pruning
+        assertEquals(0, sessionUi.destroyCalls,
+            "UI must not be destroyed even when no successor exists");
+
+        // The add-account signal should have been released (waking LobbyRunner)
+        // Verify by trying to acquire it (non-blocking) — if it was released, this succeeds
+        Field addAccountField = SessionManager.class.getDeclaredField("addAccountSignal");
+        addAccountField.setAccessible(true);
+        java.util.concurrent.Semaphore signal = (java.util.concurrent.Semaphore) addAccountField.get(mgr);
+        assertTrue(signal.tryAcquire(),
+            "when no live successor exists, requestAddAccount must be called to wake lobby/login flow");
     }
 }
