@@ -9,6 +9,7 @@ public final class WorldMapConstants {
     public static final int CELL_BLOCKED_TERRAIN = 1;
     public static final int CELL_DEEP_WATER = 1 << 1;
     public static final int CELL_OBSERVED = 1 << 2;
+    public static final int CELL_FLAGS_MASK = CELL_BLOCKED_TERRAIN | CELL_DEEP_WATER | CELL_OBSERVED;
 
     private WorldMapConstants() {
     }

@@ -33,7 +33,7 @@ class ChunkDataCodecTest {
         original.lastUpdated = 123456789L;
         original.version = 77L;
         original.setCellFlags(1, 2, 3);
-        original.setCellFlags(199, 198, 254);
+        original.setCellFlags(199, 198, WorldMapConstants.CELL_DEEP_WATER | WorldMapConstants.CELL_OBSERVED);
         original.addPortal(new Portal(PortalType.DOOR, Coord.of(1, 2), 111L, 3, 4));
         original.addPortal(new Portal(PortalType.MINE, Coord.of(199, 198), 222L, 5, 6));
 

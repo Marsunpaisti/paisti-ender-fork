@@ -22,12 +22,14 @@ class WorldMapQueryTest {
     void fullIdLookupReturnsStoredFlags() {
         WorldMap worldMap = new WorldMap();
         ChunkData chunk = chunk(0x123456789ABCDEFL);
-        chunk.setCellFlags(12, 34, 77);
+        int flags = WorldMapConstants.CELL_BLOCKED_TERRAIN | WorldMapConstants.CELL_DEEP_WATER;
+
+        chunk.setCellFlags(12, 34, flags);
 
         worldMap.putChunk(chunk);
 
         assertSame(chunk, worldMap.getChunk(chunk.gridId));
-        assertEquals(77, worldMap.getCellFlags(chunk.gridId, 12, 34));
+        assertEquals(flags, worldMap.getCellFlags(chunk.gridId, 12, 34));
     }
 
     @Test
@@ -45,11 +47,13 @@ class WorldMapQueryTest {
         long fullChunkId = 0x123456789ABCDEFL;
         WorldMap worldMap = new WorldMap();
         ChunkData chunk = chunk(fullChunkId);
-        chunk.setCellFlags(17, 23, 91);
+        int flags = WorldMapConstants.CELL_BLOCKED_TERRAIN | WorldMapConstants.CELL_OBSERVED;
+
+        chunk.setCellFlags(17, 23, flags);
 
         worldMap.putChunk(chunk);
 
-        assertEquals(91, worldMap.getCellFlags(MapUtil.packChunkCellCoord(fullChunkId, 17, 23)));
+        assertEquals(flags, worldMap.getCellFlags(MapUtil.packChunkCellCoord(fullChunkId, 17, 23)));
     }
 
     @Test
@@ -90,8 +94,8 @@ class WorldMapQueryTest {
         ChunkData secondChunk = chunk(secondChunkId);
         List<Portal> out = new ArrayList<>();
 
-        firstChunk.setCellFlags(9, 10, 44);
-        secondChunk.setCellFlags(9, 10, 88);
+        firstChunk.setCellFlags(9, 10, WorldMapConstants.CELL_BLOCKED_TERRAIN);
+        secondChunk.setCellFlags(9, 10, WorldMapConstants.CELL_DEEP_WATER);
         secondChunk.addPortal(new Portal(PortalType.MINE, Coord.of(9, 10), 1234L, 1, 2));
         worldMap.putChunk(firstChunk);
         worldMap.putChunk(secondChunk);
@@ -100,8 +104,8 @@ class WorldMapQueryTest {
         assertEquals(WorldMapConstants.INVALID_CELL_FLAGS, worldMap.getCellFlags(packedCell));
         worldMap.getCellPortals(packedCell, out);
         assertEquals(List.of(), out);
-        assertEquals(44, worldMap.getCellFlags(firstChunkId, 9, 10));
-        assertEquals(88, worldMap.getCellFlags(secondChunkId, 9, 10));
+        assertEquals(WorldMapConstants.CELL_BLOCKED_TERRAIN, worldMap.getCellFlags(firstChunkId, 9, 10));
+        assertEquals(WorldMapConstants.CELL_DEEP_WATER, worldMap.getCellFlags(secondChunkId, 9, 10));
     }
 
     @Test
@@ -112,14 +116,14 @@ class WorldMapQueryTest {
         ChunkData firstChunk = chunk(fullChunkId);
         ChunkData replacementChunk = chunk(fullChunkId);
 
-        firstChunk.setCellFlags(5, 6, 21);
-        replacementChunk.setCellFlags(5, 6, 99);
+        firstChunk.setCellFlags(5, 6, WorldMapConstants.CELL_OBSERVED);
+        replacementChunk.setCellFlags(5, 6, WorldMapConstants.CELL_BLOCKED_TERRAIN | WorldMapConstants.CELL_OBSERVED);
         worldMap.putChunk(firstChunk);
         worldMap.putChunk(replacementChunk);
 
         assertSame(replacementChunk, worldMap.getChunk(fullChunkId));
-        assertEquals(99, worldMap.getCellFlags(fullChunkId, 5, 6));
-        assertEquals(99, worldMap.getCellFlags(MapUtil.packChunkCellCoord(fullChunkId, 5, 6)));
+        assertEquals(WorldMapConstants.CELL_BLOCKED_TERRAIN | WorldMapConstants.CELL_OBSERVED, worldMap.getCellFlags(fullChunkId, 5, 6));
+        assertEquals(WorldMapConstants.CELL_BLOCKED_TERRAIN | WorldMapConstants.CELL_OBSERVED, worldMap.getCellFlags(MapUtil.packChunkCellCoord(fullChunkId, 5, 6)));
     }
 
     @Test
@@ -169,22 +173,23 @@ class WorldMapQueryTest {
             }
         });
         ChunkData existingChunk = chunk(existingChunkId);
-        existingChunk.setCellFlags(5, 6, 42);
+        int flags = WorldMapConstants.CELL_BLOCKED_TERRAIN | WorldMapConstants.CELL_DEEP_WATER | WorldMapConstants.CELL_OBSERVED;
+        existingChunk.setCellFlags(5, 6, flags);
         worldMap.putChunk(existingChunk);
 
         IOException error = assertThrows(IOException.class, worldMap::load);
 
         assertEquals("boom", error.getMessage());
         assertSame(existingChunk, worldMap.getChunk(existingChunkId));
-        assertEquals(42, worldMap.getCellFlags(existingChunkId, 5, 6));
-        assertEquals(42, worldMap.getCellFlags(MapUtil.packChunkCellCoord(existingChunkId, 5, 6)));
+        assertEquals(flags, worldMap.getCellFlags(existingChunkId, 5, 6));
+        assertEquals(flags, worldMap.getCellFlags(MapUtil.packChunkCellCoord(existingChunkId, 5, 6)));
     }
 
     @Test
     @Tag("unit")
     void saveDirtyChunksKeepsChunkDirtyWhenFlushFails() {
         ChunkData chunk = chunk(0x123456789ABCDEFL);
-        chunk.setCellFlags(5, 6, 42);
+        chunk.setCellFlags(5, 6, WorldMapConstants.CELL_FLAGS_MASK);
         List<ChunkData> savedChunks = new ArrayList<>();
         WorldMap worldMap = new WorldMap(new StorageBackend() {
             @Override
@@ -219,7 +224,7 @@ class WorldMapQueryTest {
     @Tag("unit")
     void saveDirtyChunksMarksChunkCleanAfterSuccessfulFlush() throws IOException {
         ChunkData chunk = chunk(0x123456789ABCDEFL);
-        chunk.setCellFlags(5, 6, 42);
+        chunk.setCellFlags(5, 6, WorldMapConstants.CELL_FLAGS_MASK);
         List<ChunkData> savedChunks = new ArrayList<>();
         List<String> callOrder = new ArrayList<>();
         WorldMap worldMap = new WorldMap(new StorageBackend() {

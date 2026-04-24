@@ -80,7 +80,7 @@ public class ChunkData {
     }
 
     private static void validateFlags(int flags) {
-        if ((flags < 0) || (flags > WorldMapConstants.INVALID_CELL_FLAGS)) {
+        if ((flags < 0) || ((flags & ~WorldMapConstants.CELL_FLAGS_MASK) != 0)) {
             throw new IllegalArgumentException("flags out of range: " + flags);
         }
     }

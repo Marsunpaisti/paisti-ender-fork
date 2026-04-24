@@ -8,6 +8,7 @@ import paisti.world.MapUtil;
 import paisti.world.Portal;
 import paisti.world.PortalType;
 import paisti.world.WorldMap;
+import paisti.world.WorldMapConstants;
 
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
@@ -37,7 +38,8 @@ class FileStorageBackendTest {
             chunk.layer = "inside";
             chunk.lastUpdated = 4444L;
             chunk.version = 55L;
-            chunk.setCellFlags(12, 13, 200);
+            int flags = WorldMapConstants.CELL_BLOCKED_TERRAIN | WorldMapConstants.CELL_DEEP_WATER;
+            chunk.setCellFlags(12, 13, flags);
             chunk.addPortal(new Portal(PortalType.CELLAR, Coord.of(12, 13), 999L, 14, 15));
 
             Path chunksDir = basePath.resolve("chunks");
@@ -71,7 +73,7 @@ class FileStorageBackendTest {
             assertEquals(chunk.layer, loaded.layer);
             assertEquals(chunk.lastUpdated, loaded.lastUpdated);
             assertEquals(chunk.version, loaded.version);
-            assertEquals(200, loaded.getCellFlags(12, 13));
+            assertEquals(flags, loaded.getCellFlags(12, 13));
             assertEquals(List.of(new Portal(PortalType.CELLAR, Coord.of(12, 13), 999L, 14, 15)), portals);
             assertFalse(loaded.dirty);
             assertNotNull(loaded.cells);
@@ -88,7 +90,7 @@ class FileStorageBackendTest {
         ByteArrayOutputStream errBytes = new ByteArrayOutputStream();
         try {
             ChunkData validChunk = new ChunkData(101L, 202L, Coord.of(3, 4));
-            validChunk.setCellFlags(5, 6, 77);
+            validChunk.setCellFlags(5, 6, WorldMapConstants.CELL_FLAGS_MASK);
 
             Path chunksDir = basePath.resolve("chunks");
             Files.createDirectories(chunksDir);
@@ -111,7 +113,7 @@ class FileStorageBackendTest {
             assertEquals(1, loadedChunks.size());
             ChunkData loaded = loadedChunks.iterator().next();
             assertEquals(validChunk.gridId, loaded.gridId);
-            assertEquals(77, loaded.getCellFlags(5, 6));
+            assertEquals(WorldMapConstants.CELL_FLAGS_MASK, loaded.getCellFlags(5, 6));
 
             String warningText = errBytes.toString();
             assertTrue(warningText.contains("broken.bin"));
@@ -150,7 +152,7 @@ class FileStorageBackendTest {
         ByteArrayOutputStream errBytes = new ByteArrayOutputStream();
         try {
             ChunkData validChunk = new ChunkData(101L, 202L, Coord.of(3, 4));
-            validChunk.setCellFlags(5, 6, 77);
+            validChunk.setCellFlags(5, 6, WorldMapConstants.CELL_FLAGS_MASK);
 
             Path chunksDir = basePath.resolve("chunks");
             Files.createDirectories(chunksDir);
@@ -159,7 +161,7 @@ class FileStorageBackendTest {
             }
 
             ChunkData mismatchedChunk = new ChunkData(999L, 202L, Coord.of(7, 8));
-            mismatchedChunk.setCellFlags(9, 10, 88);
+            mismatchedChunk.setCellFlags(9, 10, WorldMapConstants.CELL_DEEP_WATER);
             try (var output = Files.newOutputStream(chunksDir.resolve("102.bin"))) {
                 ChunkDataCodec.write(output, mismatchedChunk);
             }
@@ -177,7 +179,7 @@ class FileStorageBackendTest {
             assertEquals(1, loadedChunks.size());
             ChunkData loaded = loadedChunks.iterator().next();
             assertEquals(validChunk.gridId, loaded.gridId);
-            assertEquals(77, loaded.getCellFlags(5, 6));
+            assertEquals(WorldMapConstants.CELL_FLAGS_MASK, loaded.getCellFlags(5, 6));
 
             String warningText = errBytes.toString();
             assertTrue(warningText.contains("102.bin"));
@@ -195,7 +197,7 @@ class FileStorageBackendTest {
         try {
             long gridId = 0x123456789ABCDEFL;
             ChunkData chunk = new ChunkData(gridId, 303L, Coord.of(7, 8));
-            chunk.setCellFlags(12, 13, 99);
+            chunk.setCellFlags(12, 13, WorldMapConstants.CELL_BLOCKED_TERRAIN | WorldMapConstants.CELL_OBSERVED);
 
             try (StorageBackend backend = new FileStorageBackend(basePath)) {
                 backend.saveChunk(chunk);
@@ -207,7 +209,7 @@ class FileStorageBackendTest {
 
                 ChunkData loaded = worldMap.getChunk(gridId);
                 assertNotNull(loaded);
-                assertEquals(99, worldMap.getCellFlags(MapUtil.packChunkCellCoord(gridId, 12, 13)));
+                assertEquals(WorldMapConstants.CELL_BLOCKED_TERRAIN | WorldMapConstants.CELL_OBSERVED, worldMap.getCellFlags(MapUtil.packChunkCellCoord(gridId, 12, 13)));
                 assertFalse(loaded.dirty);
             }
         } finally {

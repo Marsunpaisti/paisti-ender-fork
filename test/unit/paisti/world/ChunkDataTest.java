@@ -20,6 +20,7 @@ class ChunkDataTest {
         assertEquals(1, WorldMapConstants.CELL_BLOCKED_TERRAIN);
         assertEquals(2, WorldMapConstants.CELL_DEEP_WATER);
         assertEquals(4, WorldMapConstants.CELL_OBSERVED);
+        assertEquals(7, WorldMapConstants.CELL_FLAGS_MASK);
     }
 
     @Test
@@ -80,11 +81,59 @@ class ChunkDataTest {
     @Tag("unit")
     void readsCellFlagsAsUnsignedByCoordinateAndCellIndex() {
         ChunkData chunkData = new ChunkData(1001L, 2002L, Coord.of(3, 4));
+        int flags = WorldMapConstants.CELL_BLOCKED_TERRAIN | WorldMapConstants.CELL_DEEP_WATER | WorldMapConstants.CELL_OBSERVED;
 
-        chunkData.setCellFlags(12, 34, 255);
+        chunkData.setCellFlags(12, 34, flags);
 
-        assertEquals(255, chunkData.getCellFlags(12, 34));
-        assertEquals(255, chunkData.getCellFlags(MapUtil.cellIndex(12, 34)));
+        assertEquals(flags, chunkData.getCellFlags(12, 34));
+        assertEquals(flags, chunkData.getCellFlags(MapUtil.cellIndex(12, 34)));
+    }
+
+    @Test
+    @Tag("unit")
+    void rejectsInvalidAndUndefinedCellFlags() {
+        ChunkData chunkData = new ChunkData(1001L, 2002L, Coord.of(3, 4));
+
+        assertThrows(IllegalArgumentException.class, () -> chunkData.setCellFlags(12, 34, -1));
+        assertThrows(IllegalArgumentException.class, () -> chunkData.setCellFlags(12, 34, 8));
+        assertThrows(IllegalArgumentException.class, () -> chunkData.setCellFlags(12, 34, WorldMapConstants.INVALID_CELL_FLAGS));
+        assertThrows(IllegalArgumentException.class, () -> chunkData.setCellFlags(MapUtil.cellIndex(12, 34), WorldMapConstants.INVALID_CELL_FLAGS));
+    }
+
+    @Test
+    @Tag("unit")
+    void setCellFlagsByIndexAcceptsValidFirstAndLastIndices() {
+        ChunkData chunkData = new ChunkData(1001L, 2002L, Coord.of(3, 4));
+
+        chunkData.setCellFlags(0, WorldMapConstants.CELL_BLOCKED_TERRAIN);
+        chunkData.setCellFlags(WorldMapConstants.CELL_COUNT - 1, WorldMapConstants.CELL_DEEP_WATER);
+
+        assertEquals(WorldMapConstants.CELL_BLOCKED_TERRAIN, chunkData.getCellFlags(0));
+        assertEquals(WorldMapConstants.CELL_DEEP_WATER, chunkData.getCellFlags(WorldMapConstants.CELL_COUNT - 1));
+    }
+
+    @Test
+    @Tag("unit")
+    void setCellFlagsByIndexRejectsInvalidIndices() {
+        ChunkData chunkData = new ChunkData(1001L, 2002L, Coord.of(3, 4));
+
+        assertThrows(IllegalArgumentException.class, () -> chunkData.setCellFlags(-1, WorldMapConstants.CELL_BLOCKED_TERRAIN));
+        assertThrows(IllegalArgumentException.class, () -> chunkData.setCellFlags(WorldMapConstants.CELL_COUNT, WorldMapConstants.CELL_BLOCKED_TERRAIN));
+    }
+
+    @Test
+    @Tag("unit")
+    void settingCellFlagsByIndexToExistingValueDoesNotMarkDirty() {
+        ChunkData chunkData = new ChunkData(1001L, 2002L, Coord.of(3, 4));
+        int cellIndex = MapUtil.cellIndex(12, 34);
+
+        chunkData.setCellFlags(cellIndex, WorldMapConstants.CELL_BLOCKED_TERRAIN);
+        chunkData.markClean();
+
+        chunkData.setCellFlags(cellIndex, WorldMapConstants.CELL_BLOCKED_TERRAIN);
+
+        assertEquals(WorldMapConstants.CELL_BLOCKED_TERRAIN, chunkData.getCellFlags(cellIndex));
+        assertEquals(false, chunkData.dirty);
     }
 
     @Test
