@@ -142,22 +142,8 @@ public class WorldPersistence implements AutoCloseable {
 
     @Override
     public synchronized void close() throws IOException {
-        IOException first = null;
-        try {
-            flushPendingNow();
-        } catch(IOException e) {
-            first = e;
-        }
-        try {
-            worldMap.close();
-        } catch(IOException e) {
-            if(first == null)
-                first = e;
-            else
-                first.addSuppressed(e);
-        }
-        if(first != null)
-            throw first;
+        flushPendingNow();
+        worldMap.close();
     }
 
     @FunctionalInterface

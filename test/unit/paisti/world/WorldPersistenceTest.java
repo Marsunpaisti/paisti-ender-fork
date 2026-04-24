@@ -132,6 +132,49 @@ class WorldPersistenceTest {
         assertEquals(WorldMapConstants.CELL_BLOCKED_TERRAIN, worldMap.getCellFlags(1001L, 4, 6));
     }
 
+    @Test
+    @Tag("unit")
+    void closeFailureLeavesPersistenceRetryable() throws IOException {
+        TestClock clock = new TestClock();
+        List<String> calls = new ArrayList<>();
+        WorldMap worldMap = new WorldMap(new paisti.world.storage.StorageBackend() {
+            @Override
+            public java.util.Collection<ChunkData> loadChunks() {
+                return List.of();
+            }
+
+            @Override
+            public void saveChunk(ChunkData chunk) {
+            }
+
+            @Override
+            public void flush() {
+            }
+
+            @Override
+            public void close() {
+                calls.add("close");
+            }
+        });
+        WorldPersistence persistence = new WorldPersistence(worldMap, clock::now, ignored -> {
+            calls.add("save");
+            if(calls.size() == 1)
+                throw new IOException("temporary failure");
+        });
+        byte[] flags = new byte[WorldMapConstants.CELL_COUNT];
+        flags[MapUtil.cellIndex(4, 6)] = (byte) WorldMapConstants.CELL_BLOCKED_TERRAIN;
+
+        persistence.enqueueLoadedGrids(List.of(new WorldPersistence.LoadedGrid(1001L, Coord.of(3, 4), Coord.of(300, 400), flags)));
+
+        IOException error = org.junit.jupiter.api.Assertions.assertThrows(IOException.class, persistence::close);
+        assertEquals("temporary failure", error.getMessage());
+        assertEquals(List.of("save"), calls);
+
+        persistence.close();
+
+        assertEquals(List.of("save", "save", "close"), calls);
+    }
+
     private static class TestClock {
         long now;
 
