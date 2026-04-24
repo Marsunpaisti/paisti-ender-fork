@@ -63,4 +63,15 @@ class TerrainFlagResolverTest {
         assertEquals(expected, resolver.flagsForResolvedTileResource("gfx/tiles/deep", null, Coord.of(1, 2)));
         assertEquals(0, resolver.flagsForResolvedTileResource("gfx/tiles/grass", null, Coord.of(1, 2)));
     }
+
+    @Test
+    @Tag("unit")
+    void unresolvedGridTileLookupIsConservativelyBlocked() {
+        TerrainFlagResolver resolver = new TerrainFlagResolver((grid, tileCoord) -> false);
+
+        assertEquals(
+                WorldMapConstants.CELL_BLOCKED_TERRAIN,
+                resolver.flagsForTile(null, 1, 2)
+        );
+    }
 }
