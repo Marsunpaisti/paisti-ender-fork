@@ -99,19 +99,27 @@ public class WorldPersistence implements AutoCloseable {
     private void applyLoadedGrid(LoadedGrid grid) {
         long now = clockMillis.getAsLong();
         ChunkData chunk = worldMap.getChunk(grid.gridId);
+        boolean changed = false;
         if(chunk == null) {
             chunk = new ChunkData(grid.gridId, 0L, grid.gridCoord);
             chunk.dirty = true;
             worldMap.putChunk(chunk);
+            changed = true;
         } else if(!chunk.chunkCoord.equals(grid.gridCoord)) {
             chunk.chunkCoord = grid.gridCoord;
             chunk.dirty = true;
+            changed = true;
         }
 
         for(int i = 0; i < WorldMapConstants.CELL_COUNT; i++) {
-            chunk.setCellFlags(i, mergeTerrainFlags(chunk.getCellFlags(i), Byte.toUnsignedInt(grid.cellFlags[i])));
+            int existingFlags = chunk.getCellFlags(i);
+            int mergedFlags = mergeTerrainFlags(existingFlags, Byte.toUnsignedInt(grid.cellFlags[i]));
+            if(existingFlags != mergedFlags) {
+                chunk.setCellFlags(i, mergedFlags);
+                changed = true;
+            }
         }
-        if(chunk.lastUpdated != now) {
+        if(changed && (chunk.lastUpdated != now)) {
             chunk.lastUpdated = now;
             chunk.dirty = true;
         }

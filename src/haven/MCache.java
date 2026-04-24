@@ -908,6 +908,7 @@ public class MCache implements MapSource {
 
 	public double getfz(Coord c) {return(getz(c));}
 	public Tileset tileset(int i) {return(MCache.this.tileset(i));}
+	public String tilesetname(int i) {return(MCache.this.tilesetname(i));}
 	public Tiler tiler(int i) {return(MCache.this.tiler(i));}
     }
 
@@ -1202,6 +1203,17 @@ public class MCache implements MapSource {
 	if(sets[i] == null)
 	    return(null);
 	return(sets[i].get());
+    }
+
+    public String tilesetname(int i) {
+	Indir<Resource>[] sets = this.sets;
+	if((i < 0) || (i >= sets.length) || (sets[i] == null))
+	    return(null);
+	Indir<Resource> res = sets[i];
+	if(res instanceof Resource.Named)
+	    return(((Resource.Named) res).name);
+	Resource loaded = res.get();
+	return((loaded == null) ? null : loaded.name);
     }
 
     public Tileset tileset(int i) {

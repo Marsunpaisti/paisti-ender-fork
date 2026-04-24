@@ -2,7 +2,6 @@ package paisti.world;
 
 import haven.Coord;
 import haven.MCache;
-import haven.Resource;
 import haven.resutil.Ridges;
 
 public final class TerrainFlagResolver {
@@ -49,11 +48,8 @@ public final class TerrainFlagResolver {
     }
 
     private static String tileResourceName(MCache.Grid grid, Coord tileCoord) {
-        try {
-            Resource resource = grid.tileset(grid.gettile(tileCoord)).getres();
-            return((resource == null) ? null : resource.name);
-        } catch(RuntimeException e) {
+        if(grid == null)
             return(null);
-        }
+        return(grid.tilesetname(grid.gettile(tileCoord)));
     }
 }

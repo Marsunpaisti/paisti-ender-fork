@@ -73,6 +73,28 @@ class WorldPersistenceTest {
 
     @Test
     @Tag("unit")
+    void identicalTerrainBatchDoesNotDirtyChunkAgain() throws IOException {
+        TestClock clock = new TestClock();
+        WorldMap worldMap = new WorldMap();
+        ChunkData existing = new ChunkData(1001L, 0L, Coord.of(3, 4));
+        existing.setCellFlags(4, 6, WorldMapConstants.CELL_BLOCKED_TERRAIN);
+        existing.lastUpdated = 123L;
+        existing.markClean();
+        worldMap.putChunk(existing);
+        WorldPersistence persistence = new WorldPersistence(worldMap, clock::now, WorldMap::saveDirtyChunks);
+        byte[] flags = new byte[WorldMapConstants.CELL_COUNT];
+        flags[MapUtil.cellIndex(4, 6)] = (byte) WorldMapConstants.CELL_BLOCKED_TERRAIN;
+
+        persistence.enqueueLoadedGrids(List.of(new WorldPersistence.LoadedGrid(1001L, Coord.of(3, 4), Coord.of(300, 400), flags)));
+        clock.now = 500;
+        persistence.tick();
+
+        assertEquals(123L, existing.lastUpdated);
+        assertEquals(false, existing.dirty);
+    }
+
+    @Test
+    @Tag("unit")
     void loadedGridDefensivelyCopiesCellFlags() throws IOException {
         TestClock clock = new TestClock();
         WorldMap worldMap = new WorldMap();
