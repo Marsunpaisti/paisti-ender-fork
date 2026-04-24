@@ -48,7 +48,7 @@ class FileStorageBackendTest {
             try (StorageBackend backend = new FileStorageBackend(basePath)) {
                 backend.saveChunk(chunk);
                 backend.flush();
-                assertFalse(chunk.dirty);
+                assertTrue(chunk.dirty);
             }
 
             Path savedFile = chunksDir.resolve(Long.toUnsignedString(chunk.gridId) + ".bin");

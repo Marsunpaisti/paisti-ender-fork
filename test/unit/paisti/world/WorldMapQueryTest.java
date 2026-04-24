@@ -180,6 +180,78 @@ class WorldMapQueryTest {
         assertEquals(42, worldMap.getCellFlags(MapUtil.packChunkCellCoord(existingChunkId, 5, 6)));
     }
 
+    @Test
+    @Tag("unit")
+    void saveDirtyChunksKeepsChunkDirtyWhenFlushFails() {
+        ChunkData chunk = chunk(0x123456789ABCDEFL);
+        chunk.setCellFlags(5, 6, 42);
+        List<ChunkData> savedChunks = new ArrayList<>();
+        WorldMap worldMap = new WorldMap(new StorageBackend() {
+            @Override
+            public Collection<ChunkData> loadChunks() {
+                return List.of();
+            }
+
+            @Override
+            public void saveChunk(ChunkData chunk) {
+                savedChunks.add(chunk);
+            }
+
+            @Override
+            public void flush() throws IOException {
+                throw new IOException("flush failed");
+            }
+
+            @Override
+            public void close() {
+            }
+        });
+        worldMap.putChunk(chunk);
+
+        IOException error = assertThrows(IOException.class, worldMap::saveDirtyChunks);
+
+        assertEquals("flush failed", error.getMessage());
+        assertEquals(List.of(chunk), savedChunks);
+        assertEquals(true, chunk.dirty);
+    }
+
+    @Test
+    @Tag("unit")
+    void saveDirtyChunksMarksChunkCleanAfterSuccessfulFlush() throws IOException {
+        ChunkData chunk = chunk(0x123456789ABCDEFL);
+        chunk.setCellFlags(5, 6, 42);
+        List<ChunkData> savedChunks = new ArrayList<>();
+        List<String> callOrder = new ArrayList<>();
+        WorldMap worldMap = new WorldMap(new StorageBackend() {
+            @Override
+            public Collection<ChunkData> loadChunks() {
+                return List.of();
+            }
+
+            @Override
+            public void saveChunk(ChunkData chunk) {
+                callOrder.add("save");
+                savedChunks.add(chunk);
+            }
+
+            @Override
+            public void flush() {
+                callOrder.add("flush");
+            }
+
+            @Override
+            public void close() {
+            }
+        });
+        worldMap.putChunk(chunk);
+
+        worldMap.saveDirtyChunks();
+
+        assertEquals(List.of(chunk), savedChunks);
+        assertEquals(List.of("save", "flush"), callOrder);
+        assertEquals(false, chunk.dirty);
+    }
+
     private static ChunkData chunk(long gridId) {
         return new ChunkData(gridId, 1L, Coord.of(0, 0));
     }

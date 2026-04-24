@@ -59,7 +59,6 @@ public class FileStorageBackend implements StorageBackend {
             ChunkDataCodec.write(output, safeChunk);
         }
         Files.move(tempPath, finalPath, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-        safeChunk.dirty = false;
     }
 
     @Override

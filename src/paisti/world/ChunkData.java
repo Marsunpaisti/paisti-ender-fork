@@ -48,8 +48,8 @@ public class ChunkData {
         List<Portal> portals = portalsByCell.computeIfAbsent(cellIndex, ignored -> new ArrayList<>());
         if (!portals.contains(safePortal)) {
             portals.add(safePortal);
+            dirty = true;
         }
-        dirty = true;
     }
 
     public void getCellPortals(int cellX, int cellY, List<Portal> out) {

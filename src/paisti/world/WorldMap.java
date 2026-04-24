@@ -30,19 +30,8 @@ public class WorldMap implements IPathfindingMap, IPortalMap, AutoCloseable {
 
     public void putChunk(ChunkData chunk) {
         ChunkData safeChunk = Objects.requireNonNull(chunk, "chunk");
-        ChunkData previous = chunksById.put(safeChunk.gridId, safeChunk);
-        long shortChunkKey = MapUtil.shortenChunkId(safeChunk.gridId);
-
-        if (previous == null) {
-            indexChunk(safeChunk);
-            return;
-        }
-
-        if (collidingShortChunkKeys.contains(shortChunkKey)) {
-            return;
-        }
-
-        chunksByShortKey.put(shortChunkKey, safeChunk);
+        chunksById.put(safeChunk.gridId, safeChunk);
+        indexChunk(safeChunk);
     }
 
     public ChunkData getChunk(long fullChunkId) {
@@ -80,12 +69,17 @@ public class WorldMap implements IPathfindingMap, IPortalMap, AutoCloseable {
             return;
         }
 
+        List<ChunkData> savedChunks = new java.util.ArrayList<>();
         for (ChunkData chunk : chunksById.values()) {
             if (chunk.dirty) {
                 storage.saveChunk(chunk);
+                savedChunks.add(chunk);
             }
         }
         storage.flush();
+        for (ChunkData chunk : savedChunks) {
+            chunk.markClean();
+        }
     }
 
     @Override

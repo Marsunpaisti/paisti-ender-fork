@@ -112,6 +112,23 @@ class ChunkDataTest {
 
     @Test
     @Tag("unit")
+    void addPortalNoOpsForIdenticalPortalWithoutMarkingDirty() {
+        ChunkData chunkData = new ChunkData(1001L, 2002L, Coord.of(3, 4));
+        Portal portal = new Portal(PortalType.DOOR, Coord.of(4, 5), 1234L, 8, 9);
+        List<Portal> out = new ArrayList<>();
+
+        chunkData.addPortal(portal);
+        chunkData.markClean();
+
+        chunkData.addPortal(new Portal(PortalType.DOOR, Coord.of(4, 5), 1234L, 8, 9));
+        chunkData.getCellPortals(4, 5, out);
+
+        assertEquals(List.of(portal), out);
+        assertEquals(false, chunkData.dirty);
+    }
+
+    @Test
+    @Tag("unit")
     void portalEqualityUsesSourceLocalCellValueEquality() {
         Portal first = new Portal(PortalType.DOOR, Coord.of(4, 5), 1234L, 8, 9);
         Portal second = new Portal(PortalType.DOOR, Coord.of(4, 5), 1234L, 8, 9);
