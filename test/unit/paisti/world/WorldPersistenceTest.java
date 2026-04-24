@@ -24,11 +24,11 @@ class WorldPersistenceTest {
         assertEquals(List.of(), calls);
 
         persistence.enqueueLoadedGrids(List.of(new WorldPersistence.LoadedGrid(1002L, Coord.of(3, 5), Coord.of(300, 500), new byte[WorldMapConstants.CELL_COUNT])));
-        clock.now = 999;
+        clock.now = 998;
         persistence.tick();
         assertEquals(List.of(), calls);
 
-        clock.now = 1000;
+        clock.now = 999;
         persistence.tick();
         assertEquals(List.of("save"), calls);
     }

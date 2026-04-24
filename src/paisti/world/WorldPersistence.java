@@ -40,24 +40,17 @@ public class WorldPersistence implements AutoCloseable {
     public synchronized void enqueueLoadedGrids(Collection<LoadedGrid> grids) {
         if(grids.isEmpty())
             return;
-        boolean alreadyPending = !pendingGrids.isEmpty();
         for(LoadedGrid grid : grids)
             pendingGrids.put(grid.gridId, grid);
-        lastEnqueueMillis = debounceStartMillis(alreadyPending);
+        lastEnqueueMillis = clockMillis.getAsLong();
     }
 
     public synchronized void enqueueMCacheGrids(Collection<MCache.Grid> grids) {
         if(grids.isEmpty())
             return;
-        boolean alreadyPending = !pendingGrids.isEmpty();
         for(MCache.Grid grid : grids)
             pendingGrids.put(grid.id, snapshotGrid(grid));
-        lastEnqueueMillis = debounceStartMillis(alreadyPending);
-    }
-
-    private long debounceStartMillis(boolean alreadyPending) {
-        long now = clockMillis.getAsLong();
-        return alreadyPending ? now + 1 : now;
+        lastEnqueueMillis = clockMillis.getAsLong();
     }
 
     public void tick() throws IOException {
