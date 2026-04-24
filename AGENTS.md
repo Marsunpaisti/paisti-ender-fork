@@ -33,7 +33,7 @@
 - `resources/src/local/paginae/add/**`: custom action pages/icons/help text
 - `etc/*.json*`: some static raw data like the executables icon, alchemy/treatment datasets etc.
 
-## What This Fork Adds Beyond Vanilla
-- Ender UI/features from the Ender upstream fork
-- Local resources under `resources/src/local/`
-- Our forks custom code under `src/paisti/`
+## Architecture
+- The core philosophy of the codebase is to keep the client code under src/haven as close to the upstream ender client / vanilla client as possible.
+- If a vanilla client class needs changes we create subclasses of it and add our modifications to the subclass if possible.
+- Whenever possible, we just add minimal EventBus callbacks to relevant places and build the functionality on top of the EventBus callbacks.
