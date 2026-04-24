@@ -1,21 +1,25 @@
 package paisti.client;
 
+import haven.Config;
 import haven.UI;
 import paisti.hooks.EventBus;
 import paisti.plugin.PluginService;
 import paisti.plugin.overlay.OverlayManager;
+import paisti.world.WorldPersistenceRegistry;
 
 public class PaistiServices {
     private volatile UI ui;
     private final EventBus eventBus;
     private final PluginService pluginService;
     private final OverlayManager overlayManager;
+    private final WorldPersistenceRegistry worldPersistenceRegistry;
     private boolean started;
 
     public PaistiServices() {
 	this.eventBus = new EventBus();
 	this.pluginService = new PluginService(this);
 	this.overlayManager = new OverlayManager(this);
+        this.worldPersistenceRegistry = new WorldPersistenceRegistry(Config.getFile("paisti-world").toPath());
     }
 
     public UI ui() {
@@ -46,6 +50,10 @@ public class PaistiServices {
 	return overlayManager;
     }
 
+    public WorldPersistenceRegistry worldPersistenceRegistry() {
+        return worldPersistenceRegistry;
+    }
+
     public synchronized void start() {
 	if(started)
 	    return;
@@ -61,5 +69,10 @@ public class PaistiServices {
 	    pluginService.stopAll();
 	}
 	overlayManager.stop();
+        try {
+            worldPersistenceRegistry.close();
+        } catch(Exception e) {
+            System.err.println("Failed to stop world persistence: " + e);
+        }
     }
 }

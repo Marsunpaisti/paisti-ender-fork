@@ -6,6 +6,7 @@ import paisti.client.tabs.PaistiClientTabHotkeys;
 import paisti.plugin.PaistiPlugin;
 import paisti.plugin.PluginConfig;
 import paisti.plugin.PluginDescription;
+import paisti.world.WorldPersistence;
 
 import java.awt.event.KeyEvent;
 
@@ -16,6 +17,7 @@ public class PGameUI extends GameUI {
     public static final KeyBinding kb_nextsession = KeyBinding.get("session-next-arrow", KeyMatch.forcode(KeyEvent.VK_RIGHT, KeyMatch.C | KeyMatch.S));
 
     private boolean pluginPanelInitialized;
+    private WorldPersistence worldPersistence;
 
     public PGameUI(String chrid, long plid, String genus) {
 	super(chrid, plid, genus);
@@ -25,6 +27,7 @@ public class PGameUI extends GameUI {
     protected void attached() {
 	super.attached();
 	initPluginPanel();
+        initWorldPersistence();
     }
 
     @Override
@@ -88,5 +91,19 @@ public class PGameUI extends GameUI {
 	    opts.cresize(opts.plugins);
 	else
 	    opts.main.pack();
+    }
+
+    private void initWorldPersistence() {
+        if(worldPersistence != null || !(ui instanceof PUI))
+            return;
+        try {
+            worldPersistence = PUI.of(ui).worldPersistenceRegistry().get(genus);
+        } catch(Exception e) {
+            System.err.println("Failed to initialize world persistence: " + e);
+        }
+    }
+
+    public WorldPersistence worldPersistence() {
+        return worldPersistence;
     }
 }

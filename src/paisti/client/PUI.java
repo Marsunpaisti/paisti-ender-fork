@@ -5,6 +5,7 @@ import paisti.hooks.EventBus;
 import paisti.hooks.events.BeforeOutgoingWidgetMessage;
 import paisti.plugin.PluginService;
 import paisti.plugin.overlay.OverlayManager;
+import paisti.world.WorldPersistenceRegistry;
 
 public class PUI extends UI {
     private final PaistiServices paistiServices;
@@ -34,6 +35,10 @@ public class PUI extends UI {
 
     public OverlayManager overlayManager() {
 	return paistiServices.overlayManager();
+    }
+
+    public WorldPersistenceRegistry worldPersistenceRegistry() {
+        return paistiServices.worldPersistenceRegistry();
     }
 
     @Override
