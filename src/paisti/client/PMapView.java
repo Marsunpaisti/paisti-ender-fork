@@ -37,14 +37,14 @@ public class PMapView extends MapView {
 	if(worldPersistence == null)
 	    return;
 
-	int currentSeq = glob.map.chseq;
-	if(currentSeq != observedMapChangeSeq) {
-	    observedMapChangeSeq = currentSeq;
-	    worldPersistence.enqueueMCacheGrids(glob.map.loadedGrids());
-	}
 	try {
+	    int currentSeq = glob.map.chseq;
+	    if(currentSeq != observedMapChangeSeq) {
+		worldPersistence.enqueueMCacheGrids(glob.map.loadedGrids());
+		observedMapChangeSeq = currentSeq;
+	    }
 	    worldPersistence.tick();
-	} catch(IOException e) {
+	} catch(IOException | RuntimeException e) {
 	    Warning.warn("Failed to update world persistence: %s", e);
 	}
     }
