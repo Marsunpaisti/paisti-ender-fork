@@ -3,10 +3,13 @@ package paisti.world;
 import haven.Coord;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import paisti.world.storage.StorageBackend;
 
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.PrintStream;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -141,6 +144,40 @@ class WorldMapQueryTest {
 
         String warningText = errBytes.toString();
         assertEquals(1, countOccurrences(warningText, "world map packed chunk-key collision for 20015998343868"));
+    }
+
+    @Test
+    @Tag("unit")
+    void loadKeepsExistingMapContentsWhenStorageLoadFails() {
+        long existingChunkId = 0x123456789ABCDEFL;
+        WorldMap worldMap = new WorldMap(new StorageBackend() {
+            @Override
+            public Collection<ChunkData> loadChunks() throws IOException {
+                throw new IOException("boom");
+            }
+
+            @Override
+            public void saveChunk(ChunkData chunk) {
+            }
+
+            @Override
+            public void flush() {
+            }
+
+            @Override
+            public void close() {
+            }
+        });
+        ChunkData existingChunk = chunk(existingChunkId);
+        existingChunk.setCellFlags(5, 6, 42);
+        worldMap.putChunk(existingChunk);
+
+        IOException error = assertThrows(IOException.class, worldMap::load);
+
+        assertEquals("boom", error.getMessage());
+        assertSame(existingChunk, worldMap.getChunk(existingChunkId));
+        assertEquals(42, worldMap.getCellFlags(existingChunkId, 5, 6));
+        assertEquals(42, worldMap.getCellFlags(MapUtil.packChunkCellCoord(existingChunkId, 5, 6)));
     }
 
     private static ChunkData chunk(long gridId) {

@@ -4,8 +4,10 @@ import haven.Coord;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import paisti.world.ChunkData;
+import paisti.world.MapUtil;
 import paisti.world.Portal;
 import paisti.world.PortalType;
+import paisti.world.WorldMap;
 
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
@@ -182,6 +184,33 @@ class FileStorageBackendTest {
             assertTrue(warningText.contains("gridId"));
         } finally {
             System.setErr(originalErr);
+            deleteTree(basePath);
+        }
+    }
+
+    @Test
+    @Tag("unit")
+    void worldMapLoadRebuildsPackedLookupFromPersistedChunks() throws IOException {
+        Path basePath = Files.createTempDirectory("file-storage-backend-world-map-load-test");
+        try {
+            long gridId = 0x123456789ABCDEFL;
+            ChunkData chunk = new ChunkData(gridId, 303L, Coord.of(7, 8));
+            chunk.setCellFlags(12, 13, 99);
+
+            try (StorageBackend backend = new FileStorageBackend(basePath)) {
+                backend.saveChunk(chunk);
+                backend.flush();
+            }
+
+            try (WorldMap worldMap = new WorldMap(new FileStorageBackend(basePath))) {
+                worldMap.load();
+
+                ChunkData loaded = worldMap.getChunk(gridId);
+                assertNotNull(loaded);
+                assertEquals(99, worldMap.getCellFlags(MapUtil.packChunkCellCoord(gridId, 12, 13)));
+                assertFalse(loaded.dirty);
+            }
+        } finally {
             deleteTree(basePath);
         }
     }

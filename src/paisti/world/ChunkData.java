@@ -66,6 +66,10 @@ public class ChunkData {
         }
     }
 
+    public void markClean() {
+        dirty = false;
+    }
+
     private static void validateFlags(int flags) {
         if ((flags < 0) || (flags > WorldMapConstants.INVALID_CELL_FLAGS)) {
             throw new IllegalArgumentException("flags out of range: " + flags);

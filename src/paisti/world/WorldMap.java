@@ -1,6 +1,10 @@
 package paisti.world;
 
 import haven.Warning;
+import paisti.world.storage.StorageBackend;
+
+import java.io.IOException;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -8,11 +12,22 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
-public class WorldMap implements IPathfindingMap, IPortalMap {
+public class WorldMap implements IPathfindingMap, IPortalMap, AutoCloseable {
     private final Map<Long, ChunkData> chunksById = new HashMap<>();
     private final Map<Long, ChunkData> chunksByShortKey = new HashMap<>();
     private final Set<Long> collidingShortChunkKeys = new HashSet<>();
     private final Set<Long> warnedCollidingShortChunkKeys = new HashSet<>();
+
+    private final StorageBackend storage;
+
+    public WorldMap() {
+        this(null);
+    }
+
+    public WorldMap(StorageBackend storage) {
+        this.storage = storage;
+    }
+
     public void putChunk(ChunkData chunk) {
         ChunkData safeChunk = Objects.requireNonNull(chunk, "chunk");
         ChunkData previous = chunksById.put(safeChunk.gridId, safeChunk);
@@ -40,6 +55,43 @@ public class WorldMap implements IPathfindingMap, IPortalMap {
 
         for (ChunkData chunk : chunksById.values()) {
             indexChunk(chunk);
+        }
+    }
+
+    public void load() throws IOException {
+        if (storage == null) {
+            return;
+        }
+
+        Collection<ChunkData> loadedChunks = storage.loadChunks();
+
+        chunksById.clear();
+        chunksByShortKey.clear();
+        collidingShortChunkKeys.clear();
+
+        for (ChunkData chunk : loadedChunks) {
+            chunk.markClean();
+            putChunk(chunk);
+        }
+    }
+
+    public void saveDirtyChunks() throws IOException {
+        if (storage == null) {
+            return;
+        }
+
+        for (ChunkData chunk : chunksById.values()) {
+            if (chunk.dirty) {
+                storage.saveChunk(chunk);
+            }
+        }
+        storage.flush();
+    }
+
+    @Override
+    public void close() throws IOException {
+        if (storage != null) {
+            storage.close();
         }
     }
 
