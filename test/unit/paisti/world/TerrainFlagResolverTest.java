@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class TerrainFlagResolverTest {
     @Test
@@ -39,7 +40,10 @@ class TerrainFlagResolverTest {
     @Test
     @Tag("unit")
     void unknownTileResourceIsConservativelyBlocked() {
-        assertEquals(WorldMapConstants.CELL_BLOCKED_TERRAIN, TerrainFlagResolver.flagsForTileResource(null));
+        assertThrows(
+                TerrainFlagResolver.UnresolvedTerrainException.class,
+                () -> TerrainFlagResolver.flagsForTileResource(null)
+        );
     }
 
     @Test
@@ -70,9 +74,9 @@ class TerrainFlagResolverTest {
     void unresolvedGridTileLookupIsConservativelyBlocked() {
         TerrainFlagResolver resolver = new TerrainFlagResolver((grid, tileCoord) -> false);
 
-        assertEquals(
-                WorldMapConstants.CELL_BLOCKED_TERRAIN,
-                resolver.flagsForTile(null, 1, 2)
+        assertThrows(
+                TerrainFlagResolver.UnresolvedTerrainException.class,
+                () -> resolver.flagsForTile(null, 1, 2)
         );
     }
 }

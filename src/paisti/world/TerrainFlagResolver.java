@@ -5,6 +5,12 @@ import haven.MCache;
 import haven.resutil.Ridges;
 
 public final class TerrainFlagResolver {
+    public static class UnresolvedTerrainException extends RuntimeException {
+        public UnresolvedTerrainException(String message) {
+            super(message);
+        }
+    }
+
     interface RidgeDetector {
         boolean broken(MCache.Grid grid, Coord tileCoord);
     }
@@ -21,7 +27,7 @@ public final class TerrainFlagResolver {
 
     static int flagsForTileResource(String tileName) {
         if(tileName == null)
-            return(WorldMapConstants.CELL_BLOCKED_TERRAIN);
+            throw(new UnresolvedTerrainException("tile resource name is unresolved"));
         if(tileName.equals("gfx/tiles/deepcave") || tileName.startsWith("gfx/tiles/deepcave/"))
             return(0);
         if(tileName.startsWith("gfx/tiles/deep") || tileName.startsWith("gfx/tiles/odeep"))
