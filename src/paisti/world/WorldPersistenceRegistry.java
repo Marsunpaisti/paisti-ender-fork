@@ -49,7 +49,10 @@ public class WorldPersistenceRegistry implements AutoCloseable {
             else
                 sanitized.append('_');
         }
-        return sanitized.toString();
+        String sanitizedGenus = sanitized.toString();
+        if(sanitizedGenus.equals(".") || sanitizedGenus.equals(".."))
+            return "unknown";
+        return sanitizedGenus;
     }
 
     @Override

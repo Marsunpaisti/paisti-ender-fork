@@ -53,6 +53,8 @@ class WorldPersistenceRegistryTest {
             assertEquals(basePath.resolve("unknown"), WorldPersistenceRegistry.storageBasePath(basePath, null));
             assertEquals(basePath.resolve("unknown"), WorldPersistenceRegistry.storageBasePath(basePath, ""));
             assertEquals(basePath.resolve("abc-DEF_123.45"), WorldPersistenceRegistry.storageBasePath(basePath, "abc-DEF_123.45"));
+            assertEquals(Path.of("base", "unknown"), WorldPersistenceRegistry.storageBasePath(Path.of("base"), "."));
+            assertEquals(Path.of("base", "unknown"), WorldPersistenceRegistry.storageBasePath(Path.of("base"), ".."));
         } finally {
             deleteTree(basePath);
         }
