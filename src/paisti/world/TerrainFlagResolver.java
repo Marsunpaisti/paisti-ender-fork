@@ -1,6 +1,7 @@
 package paisti.world;
 
 import haven.Coord;
+import haven.Loading;
 import haven.MCache;
 import haven.resutil.Ridges;
 
@@ -47,6 +48,8 @@ public final class TerrainFlagResolver {
         try {
             if(ridgeDetector.broken(grid, tileCoord))
                 flags |= WorldMapConstants.CELL_BLOCKED_TERRAIN;
+        } catch(Loading e) {
+            throw e;
         } catch(RuntimeException e) {
             return(flags);
         }

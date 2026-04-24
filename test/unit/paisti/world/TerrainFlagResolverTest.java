@@ -71,6 +71,16 @@ class TerrainFlagResolverTest {
 
     @Test
     @Tag("unit")
+    void ridgeLoadingExceptionPropagatesForRetry() {
+        TerrainFlagResolver resolver = new TerrainFlagResolver((grid, tileCoord) -> {
+            throw new haven.Loading("ridge loading");
+        });
+
+        assertThrows(haven.Loading.class, () -> resolver.flagsForResolvedTileResource("gfx/tiles/grass", null, Coord.of(1, 2)));
+    }
+
+    @Test
+    @Tag("unit")
     void unresolvedGridTileLookupIsConservativelyBlocked() {
         TerrainFlagResolver resolver = new TerrainFlagResolver((grid, tileCoord) -> false);
 
