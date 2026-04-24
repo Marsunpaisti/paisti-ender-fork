@@ -103,7 +103,11 @@ public class PGameUI extends GameUI {
         }
     }
 
+    /**
+     * May return null if world persistence initialization has not succeeded.
+     */
     public WorldPersistence worldPersistence() {
+        initWorldPersistence();
         return worldPersistence;
     }
 }

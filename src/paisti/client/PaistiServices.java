@@ -2,6 +2,7 @@ package paisti.client;
 
 import haven.Config;
 import haven.UI;
+import haven.Warning;
 import paisti.hooks.EventBus;
 import paisti.plugin.PluginService;
 import paisti.plugin.overlay.OverlayManager;
@@ -72,7 +73,7 @@ public class PaistiServices {
         try {
             worldPersistenceRegistry.close();
         } catch(Exception e) {
-            System.err.println("Failed to stop world persistence: " + e);
+            Warning.warn("Failed to stop world persistence: %s", e);
         }
     }
 }
