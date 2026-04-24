@@ -37,8 +37,17 @@ public class ChunkData {
     }
 
     public void setCellFlags(int cellX, int cellY, int flags) {
+        setCellFlags(MapUtil.cellIndex(cellX, cellY), flags);
+    }
+
+    public void setCellFlags(int cellIndex, int flags) {
+        validateCellIndex(cellIndex);
         validateFlags(flags);
-        cells[MapUtil.cellIndex(cellX, cellY)] = (byte) flags;
+        byte encodedFlags = (byte) flags;
+        if (cells[cellIndex] == encodedFlags) {
+            return;
+        }
+        cells[cellIndex] = encodedFlags;
         dirty = true;
     }
 

@@ -16,6 +16,28 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class ChunkDataTest {
     @Test
     @Tag("unit")
+    void terrainAndObservedFlagsUseSeparateBitsWithoutTerrainKnown() {
+        assertEquals(1, WorldMapConstants.CELL_BLOCKED_TERRAIN);
+        assertEquals(2, WorldMapConstants.CELL_DEEP_WATER);
+        assertEquals(4, WorldMapConstants.CELL_OBSERVED);
+    }
+
+    @Test
+    @Tag("unit")
+    void settingCellFlagsToExistingValueDoesNotMarkDirty() {
+        ChunkData chunkData = new ChunkData(1001L, 2002L, Coord.of(3, 4));
+
+        chunkData.setCellFlags(12, 34, WorldMapConstants.CELL_BLOCKED_TERRAIN);
+        chunkData.markClean();
+
+        chunkData.setCellFlags(12, 34, WorldMapConstants.CELL_BLOCKED_TERRAIN);
+
+        assertEquals(WorldMapConstants.CELL_BLOCKED_TERRAIN, chunkData.getCellFlags(12, 34));
+        assertEquals(false, chunkData.dirty);
+    }
+
+    @Test
+    @Tag("unit")
     void fieldsMatchPlannedTypesAndMutability() {
         ChunkData chunkData = new ChunkData(1001L, 2002L, Coord.of(3, 4));
         Coord replacementCoord = Coord.of(8, 9);
