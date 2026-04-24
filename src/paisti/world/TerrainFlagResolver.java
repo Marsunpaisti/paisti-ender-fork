@@ -27,7 +27,7 @@ public final class TerrainFlagResolver {
             return(0);
         if(tileName.equals("gfx/tiles/deep") || tileName.equals("gfx/tiles/odeep"))
             return(WorldMapConstants.CELL_BLOCKED_TERRAIN | WorldMapConstants.CELL_DEEP_WATER);
-        if(tileName.equals("gfx/tiles/nil") || tileName.startsWith("gfx/tiles/cave") || tileName.startsWith("gfx/tiles/rocks"))
+        if(tileName.startsWith("gfx/tiles/nil") || tileName.startsWith("gfx/tiles/cave") || tileName.startsWith("gfx/tiles/rocks"))
             return(WorldMapConstants.CELL_BLOCKED_TERRAIN);
         return(0);
     }
