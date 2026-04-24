@@ -57,6 +57,12 @@ public class MCache implements MapSource {
     public long lastupdate = 0;
     Map<Integer, Defrag> fragbufs = new TreeMap<Integer, Defrag>();
 
+    public Collection<Grid> loadedGrids() {
+	synchronized(grids) {
+	    return new ArrayList<>(grids.values());
+	}
+    }
+
     public static class LoadingMap extends Loading {
 	public final Coord gc;
 	private transient final MCache map;
