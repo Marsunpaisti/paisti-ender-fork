@@ -1,0 +1,176 @@
+package paisti.world;
+
+import haven.Coord;
+import haven.MCache;
+
+import java.io.IOException;
+import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Objects;
+import java.util.function.LongSupplier;
+
+public class WorldPersistence implements AutoCloseable {
+    static final long GRID_BATCH_DEBOUNCE_MS = 500L;
+
+    private static final int TERRAIN_FLAGS_MASK = WorldMapConstants.CELL_BLOCKED_TERRAIN | WorldMapConstants.CELL_DEEP_WATER;
+
+    private final WorldMap worldMap;
+    private final LongSupplier clockMillis;
+    private final SaveAction saveAction;
+    private final TerrainFlagResolver terrainFlagResolver;
+    private final Map<Long, LoadedGrid> pendingGrids = new LinkedHashMap<>();
+    private long lastEnqueueMillis;
+
+    public WorldPersistence(WorldMap worldMap) {
+        this(worldMap, System::currentTimeMillis, WorldMap::saveDirtyChunks);
+    }
+
+    WorldPersistence(WorldMap worldMap, LongSupplier clockMillis, SaveAction saveAction) {
+        this.worldMap = Objects.requireNonNull(worldMap, "worldMap");
+        this.clockMillis = Objects.requireNonNull(clockMillis, "clockMillis");
+        this.saveAction = Objects.requireNonNull(saveAction, "saveAction");
+        this.terrainFlagResolver = new TerrainFlagResolver();
+    }
+
+    public WorldMap worldMap() {
+        return worldMap;
+    }
+
+    public synchronized void enqueueLoadedGrids(Collection<LoadedGrid> grids) {
+        if(grids.isEmpty())
+            return;
+        boolean alreadyPending = !pendingGrids.isEmpty();
+        for(LoadedGrid grid : grids)
+            pendingGrids.put(grid.gridId, grid);
+        lastEnqueueMillis = debounceStartMillis(alreadyPending);
+    }
+
+    public synchronized void enqueueMCacheGrids(Collection<MCache.Grid> grids) {
+        if(grids.isEmpty())
+            return;
+        boolean alreadyPending = !pendingGrids.isEmpty();
+        for(MCache.Grid grid : grids)
+            pendingGrids.put(grid.id, snapshotGrid(grid));
+        lastEnqueueMillis = debounceStartMillis(alreadyPending);
+    }
+
+    private long debounceStartMillis(boolean alreadyPending) {
+        long now = clockMillis.getAsLong();
+        return alreadyPending ? now + 1 : now;
+    }
+
+    public void tick() throws IOException {
+        Map<Long, LoadedGrid> batch;
+        synchronized(this) {
+            if(pendingGrids.isEmpty())
+                return;
+            if((clockMillis.getAsLong() - lastEnqueueMillis) < GRID_BATCH_DEBOUNCE_MS)
+                return;
+            batch = drainPendingGrids();
+        }
+        applyBatch(batch);
+    }
+
+    private LoadedGrid snapshotGrid(MCache.Grid grid) {
+        byte[] flags = new byte[WorldMapConstants.CELL_COUNT];
+        for(int tileY = 0; tileY < WorldMapConstants.CELL_AXIS / 2; tileY++) {
+            for(int tileX = 0; tileX < WorldMapConstants.CELL_AXIS / 2; tileX++) {
+                int tileFlags = terrainFlagResolver.flagsForTile(grid, tileX, tileY);
+                int cellX = tileX * 2;
+                int cellY = tileY * 2;
+                flags[MapUtil.cellIndex(cellX, cellY)] = (byte) tileFlags;
+                flags[MapUtil.cellIndex(cellX + 1, cellY)] = (byte) tileFlags;
+                flags[MapUtil.cellIndex(cellX, cellY + 1)] = (byte) tileFlags;
+                flags[MapUtil.cellIndex(cellX + 1, cellY + 1)] = (byte) tileFlags;
+            }
+        }
+        return new LoadedGrid(grid.id, grid.gc, grid.ul, flags);
+    }
+
+    private void applyBatch(Map<Long, LoadedGrid> batch) throws IOException {
+        for(LoadedGrid grid : batch.values())
+            applyLoadedGrid(grid);
+        saveAction.save(worldMap);
+    }
+
+    private void applyLoadedGrid(LoadedGrid grid) {
+        long now = clockMillis.getAsLong();
+        ChunkData chunk = worldMap.getChunk(grid.gridId);
+        if(chunk == null) {
+            chunk = new ChunkData(grid.gridId, 0L, grid.gridCoord);
+            chunk.dirty = true;
+            worldMap.putChunk(chunk);
+        } else if(!chunk.chunkCoord.equals(grid.gridCoord)) {
+            chunk.chunkCoord = grid.gridCoord;
+            chunk.dirty = true;
+        }
+
+        for(int i = 0; i < WorldMapConstants.CELL_COUNT; i++) {
+            int dynamicFlags = chunk.getCellFlags(i) & WorldMapConstants.CELL_OBSERVED;
+            int terrainFlags = Byte.toUnsignedInt(grid.cellFlags[i]) & TERRAIN_FLAGS_MASK;
+            chunk.setCellFlags(i, dynamicFlags | terrainFlags);
+        }
+        if(chunk.lastUpdated != now) {
+            chunk.lastUpdated = now;
+            chunk.dirty = true;
+        }
+    }
+
+    private void flushPendingNow() throws IOException {
+        Map<Long, LoadedGrid> batch;
+        synchronized(this) {
+            if(pendingGrids.isEmpty())
+                return;
+            batch = drainPendingGrids();
+        }
+        applyBatch(batch);
+    }
+
+    private Map<Long, LoadedGrid> drainPendingGrids() {
+        Map<Long, LoadedGrid> batch = new LinkedHashMap<>(pendingGrids);
+        pendingGrids.clear();
+        return batch;
+    }
+
+    @Override
+    public void close() throws IOException {
+        IOException first = null;
+        try {
+            flushPendingNow();
+        } catch(IOException e) {
+            first = e;
+        }
+        try {
+            worldMap.close();
+        } catch(IOException e) {
+            if(first == null)
+                first = e;
+            else
+                first.addSuppressed(e);
+        }
+        if(first != null)
+            throw first;
+    }
+
+    @FunctionalInterface
+    interface SaveAction {
+        void save(WorldMap worldMap) throws IOException;
+    }
+
+    static class LoadedGrid {
+        final long gridId;
+        final Coord gridCoord;
+        final Coord worldTileOrigin;
+        final byte[] cellFlags;
+
+        LoadedGrid(long gridId, Coord gridCoord, Coord worldTileOrigin, byte[] cellFlags) {
+            this.gridId = gridId;
+            this.gridCoord = Objects.requireNonNull(gridCoord, "gridCoord");
+            this.worldTileOrigin = Objects.requireNonNull(worldTileOrigin, "worldTileOrigin");
+            this.cellFlags = Objects.requireNonNull(cellFlags, "cellFlags");
+            if(cellFlags.length != WorldMapConstants.CELL_COUNT)
+                throw new IllegalArgumentException("cellFlags length must be " + WorldMapConstants.CELL_COUNT);
+        }
+    }
+}
