@@ -4,6 +4,7 @@ import haven.Coord;
 import haven.MCache;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -37,7 +38,7 @@ public class WorldPersistence implements AutoCloseable {
         return worldMap;
     }
 
-    public synchronized void enqueueLoadedGrids(Collection<LoadedGrid> grids) {
+    synchronized void enqueueLoadedGrids(Collection<LoadedGrid> grids) {
         if(grids.isEmpty())
             return;
         for(LoadedGrid grid : grids)
@@ -53,16 +54,12 @@ public class WorldPersistence implements AutoCloseable {
         lastEnqueueMillis = clockMillis.getAsLong();
     }
 
-    public void tick() throws IOException {
-        Map<Long, LoadedGrid> batch;
-        synchronized(this) {
-            if(pendingGrids.isEmpty())
-                return;
-            if((clockMillis.getAsLong() - lastEnqueueMillis) < GRID_BATCH_DEBOUNCE_MS)
-                return;
-            batch = drainPendingGrids();
-        }
-        applyBatch(batch);
+    public synchronized void tick() throws IOException {
+        if(pendingGrids.isEmpty())
+            return;
+        if((clockMillis.getAsLong() - lastEnqueueMillis) < GRID_BATCH_DEBOUNCE_MS)
+            return;
+        applyBatch(drainPendingGrids());
     }
 
     private LoadedGrid snapshotGrid(MCache.Grid grid) {
@@ -87,6 +84,12 @@ public class WorldPersistence implements AutoCloseable {
         saveAction.save(worldMap);
     }
 
+    private static int mergeTerrainFlags(int existingFlags, int incomingTerrainFlags) {
+        int dynamicFlags = existingFlags & WorldMapConstants.CELL_OBSERVED;
+        int terrainFlags = incomingTerrainFlags & TERRAIN_FLAGS_MASK;
+        return dynamicFlags | terrainFlags;
+    }
+
     private void applyLoadedGrid(LoadedGrid grid) {
         long now = clockMillis.getAsLong();
         ChunkData chunk = worldMap.getChunk(grid.gridId);
@@ -100,9 +103,7 @@ public class WorldPersistence implements AutoCloseable {
         }
 
         for(int i = 0; i < WorldMapConstants.CELL_COUNT; i++) {
-            int dynamicFlags = chunk.getCellFlags(i) & WorldMapConstants.CELL_OBSERVED;
-            int terrainFlags = Byte.toUnsignedInt(grid.cellFlags[i]) & TERRAIN_FLAGS_MASK;
-            chunk.setCellFlags(i, dynamicFlags | terrainFlags);
+            chunk.setCellFlags(i, mergeTerrainFlags(chunk.getCellFlags(i), Byte.toUnsignedInt(grid.cellFlags[i])));
         }
         if(chunk.lastUpdated != now) {
             chunk.lastUpdated = now;
@@ -110,14 +111,10 @@ public class WorldPersistence implements AutoCloseable {
         }
     }
 
-    private void flushPendingNow() throws IOException {
-        Map<Long, LoadedGrid> batch;
-        synchronized(this) {
-            if(pendingGrids.isEmpty())
-                return;
-            batch = drainPendingGrids();
-        }
-        applyBatch(batch);
+    private synchronized void flushPendingNow() throws IOException {
+        if(pendingGrids.isEmpty())
+            return;
+        applyBatch(drainPendingGrids());
     }
 
     private Map<Long, LoadedGrid> drainPendingGrids() {
@@ -127,7 +124,7 @@ public class WorldPersistence implements AutoCloseable {
     }
 
     @Override
-    public void close() throws IOException {
+    public synchronized void close() throws IOException {
         IOException first = null;
         try {
             flushPendingNow();
@@ -161,9 +158,10 @@ public class WorldPersistence implements AutoCloseable {
             this.gridId = gridId;
             this.gridCoord = Objects.requireNonNull(gridCoord, "gridCoord");
             this.worldTileOrigin = Objects.requireNonNull(worldTileOrigin, "worldTileOrigin");
-            this.cellFlags = Objects.requireNonNull(cellFlags, "cellFlags");
+            Objects.requireNonNull(cellFlags, "cellFlags");
             if(cellFlags.length != WorldMapConstants.CELL_COUNT)
                 throw new IllegalArgumentException("cellFlags length must be " + WorldMapConstants.CELL_COUNT);
+            this.cellFlags = Arrays.copyOf(cellFlags, cellFlags.length);
         }
     }
 }

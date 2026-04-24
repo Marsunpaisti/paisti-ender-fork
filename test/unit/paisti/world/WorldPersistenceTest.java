@@ -71,6 +71,41 @@ class WorldPersistenceTest {
         assertEquals(WorldMapConstants.CELL_OBSERVED | WorldMapConstants.CELL_BLOCKED_TERRAIN, worldMap.getCellFlags(1001L, 4, 6));
     }
 
+    @Test
+    @Tag("unit")
+    void loadedGridDefensivelyCopiesCellFlags() throws IOException {
+        TestClock clock = new TestClock();
+        WorldMap worldMap = new WorldMap();
+        WorldPersistence persistence = new WorldPersistence(worldMap, clock::now, WorldMap::saveDirtyChunks);
+        byte[] flags = new byte[WorldMapConstants.CELL_COUNT];
+        flags[MapUtil.cellIndex(4, 6)] = (byte) WorldMapConstants.CELL_BLOCKED_TERRAIN;
+
+        persistence.enqueueLoadedGrids(List.of(new WorldPersistence.LoadedGrid(1001L, Coord.of(3, 4), Coord.of(300, 400), flags)));
+        flags[MapUtil.cellIndex(4, 6)] = 0;
+        clock.now = 500;
+        persistence.tick();
+
+        assertEquals(WorldMapConstants.CELL_BLOCKED_TERRAIN, worldMap.getCellFlags(1001L, 4, 6));
+    }
+
+    @Test
+    @Tag("unit")
+    void closeFlushesPendingBatchWithoutWaitingForDebounce() throws IOException {
+        TestClock clock = new TestClock();
+        WorldMap worldMap = new WorldMap();
+        List<String> calls = new ArrayList<>();
+        WorldPersistence persistence = new WorldPersistence(worldMap, clock::now, ignored -> calls.add("save"));
+        byte[] flags = new byte[WorldMapConstants.CELL_COUNT];
+        flags[MapUtil.cellIndex(4, 6)] = (byte) WorldMapConstants.CELL_BLOCKED_TERRAIN;
+
+        persistence.enqueueLoadedGrids(List.of(new WorldPersistence.LoadedGrid(1001L, Coord.of(3, 4), Coord.of(300, 400), flags)));
+        clock.now = 100;
+        persistence.close();
+
+        assertEquals(WorldMapConstants.CELL_BLOCKED_TERRAIN, worldMap.getCellFlags(1001L, 4, 6));
+        assertEquals(List.of("save"), calls);
+    }
+
     private static class TestClock {
         long now;
 
