@@ -32,6 +32,7 @@ class TerrainFlagResolverTest {
     @Tag("unit")
     void deepCaveOverridesCaveAndDeepPrefixesAndRemainsPassable() {
         assertEquals(0, TerrainFlagResolver.flagsForTileResource("gfx/tiles/deepcave"));
+        assertEquals(0, TerrainFlagResolver.flagsForTileResource("gfx/tiles/deepcave/edge"));
         assertEquals(0, TerrainFlagResolver.flagsForTileResource("gfx/tiles/grass"));
     }
 

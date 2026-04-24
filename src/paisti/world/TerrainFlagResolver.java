@@ -23,7 +23,7 @@ public final class TerrainFlagResolver {
     static int flagsForTileResource(String tileName) {
         if(tileName == null)
             return(WorldMapConstants.CELL_BLOCKED_TERRAIN);
-        if(tileName.equals("gfx/tiles/deepcave"))
+        if(tileName.equals("gfx/tiles/deepcave") || tileName.startsWith("gfx/tiles/deepcave/"))
             return(0);
         if(tileName.startsWith("gfx/tiles/deep") || tileName.startsWith("gfx/tiles/odeep"))
             return(WorldMapConstants.CELL_BLOCKED_TERRAIN | WorldMapConstants.CELL_DEEP_WATER);
