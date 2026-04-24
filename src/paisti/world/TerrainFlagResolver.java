@@ -6,6 +6,20 @@ import haven.Resource;
 import haven.resutil.Ridges;
 
 public final class TerrainFlagResolver {
+    interface RidgeDetector {
+        boolean broken(MCache.Grid grid, Coord tileCoord);
+    }
+
+    private final RidgeDetector ridgeDetector;
+
+    public TerrainFlagResolver() {
+        this((grid, tileCoord) -> Ridges.brokenp(grid, tileCoord));
+    }
+
+    TerrainFlagResolver(RidgeDetector ridgeDetector) {
+        this.ridgeDetector = ridgeDetector;
+    }
+
     static int flagsForTileResource(String tileName) {
         if(tileName == null)
             return(WorldMapConstants.CELL_BLOCKED_TERRAIN);
@@ -20,9 +34,13 @@ public final class TerrainFlagResolver {
 
     public int flagsForTile(MCache.Grid grid, int tileX, int tileY) {
         Coord tileCoord = Coord.of(tileX, tileY);
-        int flags = flagsForTileResource(tileResourceName(grid, tileCoord));
+        return(flagsForResolvedTileResource(tileResourceName(grid, tileCoord), grid, tileCoord));
+    }
+
+    int flagsForResolvedTileResource(String tileName, MCache.Grid grid, Coord tileCoord) {
+        int flags = flagsForTileResource(tileName);
         try {
-            if(Ridges.brokenp(grid, tileCoord))
+            if(ridgeDetector.broken(grid, tileCoord))
                 flags |= WorldMapConstants.CELL_BLOCKED_TERRAIN;
         } catch(RuntimeException e) {
             return(flags);

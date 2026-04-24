@@ -1,5 +1,6 @@
 package paisti.world;
 
+import haven.Coord;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
@@ -34,5 +35,28 @@ class TerrainFlagResolverTest {
     @Tag("unit")
     void unknownTileResourceIsConservativelyBlocked() {
         assertEquals(WorldMapConstants.CELL_BLOCKED_TERRAIN, TerrainFlagResolver.flagsForTileResource(null));
+    }
+
+    @Test
+    @Tag("unit")
+    void brokenRidgeAddsTerrainBlockedToPassableTile() {
+        TerrainFlagResolver resolver = new TerrainFlagResolver((grid, tileCoord) -> true);
+
+        assertEquals(
+                WorldMapConstants.CELL_BLOCKED_TERRAIN,
+                resolver.flagsForResolvedTileResource("gfx/tiles/grass", null, Coord.of(1, 2))
+        );
+    }
+
+    @Test
+    @Tag("unit")
+    void ridgeDetectionExceptionLeavesResourceFlagsUnchanged() {
+        TerrainFlagResolver resolver = new TerrainFlagResolver((grid, tileCoord) -> {
+            throw new RuntimeException("ridge loading");
+        });
+        int expected = WorldMapConstants.CELL_BLOCKED_TERRAIN | WorldMapConstants.CELL_DEEP_WATER;
+
+        assertEquals(expected, resolver.flagsForResolvedTileResource("gfx/tiles/deep", null, Coord.of(1, 2)));
+        assertEquals(0, resolver.flagsForResolvedTileResource("gfx/tiles/grass", null, Coord.of(1, 2)));
     }
 }
