@@ -13,6 +13,7 @@ class TerrainFlagResolverTest {
         assertEquals(WorldMapConstants.CELL_BLOCKED_TERRAIN, TerrainFlagResolver.flagsForTileResource("gfx/tiles/nil"));
         assertEquals(WorldMapConstants.CELL_BLOCKED_TERRAIN, TerrainFlagResolver.flagsForTileResource("gfx/tiles/nil/edge"));
         assertEquals(WorldMapConstants.CELL_BLOCKED_TERRAIN, TerrainFlagResolver.flagsForTileResource("gfx/tiles/cave"));
+        assertEquals(WorldMapConstants.CELL_BLOCKED_TERRAIN, TerrainFlagResolver.flagsForTileResource("gfx/tiles/cave/edge"));
         assertEquals(WorldMapConstants.CELL_BLOCKED_TERRAIN, TerrainFlagResolver.flagsForTileResource("gfx/tiles/rocks/gray"));
     }
 
