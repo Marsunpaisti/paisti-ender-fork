@@ -1796,8 +1796,10 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
     public static final KeyBinding kb_hide = KeyBinding.get("ui-toggle", KeyMatch.nil);
     public static final KeyBinding kb_logout = KeyBinding.get("logout", KeyMatch.nil);
     public static final KeyBinding kb_switchchr = KeyBinding.get("logout-cs", KeyMatch.nil);
-    public static final KeyBinding kb_switchsession = KeyBinding.get("session-next", KeyMatch.forchar('Q', KeyMatch.M));
-    public static final KeyBinding kb_addaccount = KeyBinding.get("session-add", KeyMatch.forchar('N', KeyMatch.M));
+    public static final KeyBinding kb_addsession = KeyBinding.get("session-add-arrow", KeyMatch.forcode(KeyEvent.VK_UP, KeyMatch.C | KeyMatch.S));
+    public static final KeyBinding kb_removesession = KeyBinding.get("session-remove-arrow", KeyMatch.forcode(KeyEvent.VK_DOWN, KeyMatch.C | KeyMatch.S));
+    public static final KeyBinding kb_prevsession = KeyBinding.get("session-prev-arrow", KeyMatch.forcode(KeyEvent.VK_LEFT, KeyMatch.C | KeyMatch.S));
+    public static final KeyBinding kb_nextsession = KeyBinding.get("session-next-arrow", KeyMatch.forcode(KeyEvent.VK_RIGHT, KeyMatch.C | KeyMatch.S));
     public boolean globtype(GlobKeyEvent ev) {
 	if(ev.c == ':') {
 	    entercmd();
@@ -1814,11 +1816,17 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
 	} else if(kb_switchchr.key().match(ev)) {
 	    act("lo", "cs");
 	    return(true);
-	} else if(kb_switchsession.key().match(ev)) {
-	    SessionManager.getInstance().switchToNext();
-	    return(true);
-	} else if(kb_addaccount.key().match(ev)) {
+	} else if(kb_addsession.key().match(ev)) {
 	    SessionManager.getInstance().requestAddAccount();
+	    return(true);
+	} else if(kb_removesession.key().match(ev)) {
+	    SessionManager.getInstance().removeActiveSession();
+	    return(true);
+	} else if(kb_prevsession.key().match(ev)) {
+	    SessionManager.getInstance().switchToPrevious();
+	    return(true);
+	} else if(kb_nextsession.key().match(ev)) {
+	    SessionManager.getInstance().switchToNext();
 	    return(true);
 	} else if(kb_chat.key().match(ev)) {
 	    toggleChat();

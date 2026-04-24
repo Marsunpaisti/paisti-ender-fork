@@ -354,7 +354,7 @@ public interface GLPanel extends UIPanel, UI.Context {
 	    SessionManager mgr = SessionManager.getInstance();
 	    for(SessionContext ctx : mgr.getSessions()) {
 		UI sui = ctx.ui;
-		if(sui == null || sui == visibleUi)
+		if(sui == null || sui == visibleUi || !ctx.isSelectable())
 		    continue;
 		synchronized(sui) {
 		    boolean returnHit = false;
@@ -587,6 +587,11 @@ public interface GLPanel extends UIPanel, UI.Context {
 		    synchronized(ui) {
 			CPUProfile.phase(curf, "dsp");
 			ed.dispatch(ui);
+			if(uiWasSession && !SessionManager.getInstance().isActiveSessionUi(ui)) {
+			    env.submit(buf);
+			    buf = null;
+			    continue;
+			}
 			ui.mousehover(ui.mc);
 
 			CPUProfile.phase(curf, "stick");

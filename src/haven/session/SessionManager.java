@@ -46,6 +46,10 @@ public class SessionManager {
         return false;
     }
 
+    public synchronized boolean isActiveSessionUi(UI ui) {
+        return activeSession != null && activeSession.ui == ui;
+    }
+
     public synchronized SessionContext getActiveSession() {
         return activeSession;
     }
@@ -61,12 +65,59 @@ public class SessionManager {
         int size = sessions.size();
         for(int i = 1; i <= size; i++) {
             SessionContext candidate = sessions.get((idx + i) % size);
-            if(candidate.isAlive()) {
+            if(candidate.isSelectable()) {
                 activeSession = candidate;
                 return;
             }
         }
         /* All sessions are dead/retiring — leave activeSession as-is */
+    }
+
+    public synchronized void switchToPrevious() {
+        if(sessions.size() <= 1) {
+            return;
+        }
+        int idx = sessions.indexOf(activeSession);
+        if(idx < 0) {
+            idx = 0;
+        }
+        int size = sessions.size();
+        for(int i = 1; i <= size; i++) {
+            SessionContext candidate = sessions.get((idx - i + size) % size);
+            if(candidate.isSelectable()) {
+                activeSession = candidate;
+                return;
+            }
+        }
+        /* All sessions are dead/retiring — leave activeSession as-is */
+    }
+
+    public void removeActiveSession() {
+        SessionContext ctx;
+        boolean wakeLogin = false;
+        synchronized(this) {
+            ctx = activeSession;
+            if(ctx == null) {
+                return;
+            }
+            int idx = sessions.indexOf(ctx);
+            int size = sessions.size();
+            activeSession = null;
+            if(idx >= 0) {
+                for(int i = 1; i < size; i++) {
+                    SessionContext candidate = sessions.get((idx - i + size) % size);
+                    if(candidate != ctx && candidate.isSelectable()) {
+                        activeSession = candidate;
+                        break;
+                    }
+                }
+            }
+            wakeLogin = (activeSession == null);
+        }
+        ctx.close();
+        if(wakeLogin) {
+            requestAddAccount();
+        }
     }
 
     /**
@@ -80,7 +131,7 @@ public class SessionManager {
             return;
         }
         for(SessionContext other : sessions) {
-            if(other != ctx && other.isAlive()) {
+            if(other != ctx && other.isSelectable()) {
                 activeSession = other;
                 return;
             }

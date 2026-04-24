@@ -9,6 +9,7 @@ public class SessionContext {
     public final UI ui;
     public final RemoteUI remoteUI;
     private boolean disposed = false;
+    private boolean retiring = false;
 
     public SessionContext(Session session, UI ui, RemoteUI remoteUI) {
         this.session = session;
@@ -20,7 +21,14 @@ public class SessionContext {
         return !session.isClosed();
     }
 
+    public synchronized boolean isSelectable() {
+        return !retiring && isAlive();
+    }
+
     public void close() {
+        synchronized(this) {
+            retiring = true;
+        }
         session.close();
     }
 

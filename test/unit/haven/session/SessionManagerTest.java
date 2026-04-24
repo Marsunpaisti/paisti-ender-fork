@@ -237,6 +237,81 @@ class SessionManagerTest {
 
     @Test
     @Tag("unit")
+    void switchToPreviousCyclesSessions() {
+        SessionManager manager = SessionManager.getInstance();
+        reset(manager);
+        SessionFixture first = newContext("first");
+        SessionFixture second = newContext("second");
+        SessionFixture third = newContext("third");
+
+        manager.addSession(first.context);
+        manager.addSession(second.context);
+        manager.addSession(third.context);
+
+        manager.switchToPrevious();
+        assertSame(second.context, manager.getActiveSession());
+
+        manager.switchToPrevious();
+        assertSame(first.context, manager.getActiveSession());
+
+        manager.switchToPrevious();
+        assertSame(third.context, manager.getActiveSession());
+
+        reset(manager);
+    }
+
+    @Test
+    @Tag("unit")
+    void removeActiveSessionClosesCurrentWithoutImmediateDisposal() {
+        SessionManager manager = SessionManager.getInstance();
+        reset(manager);
+        SessionFixture first = newContext("first");
+        SessionFixture second = newContext("second");
+        SessionFixture third = newContext("third");
+
+        manager.addSession(first.context);
+        manager.addSession(second.context);
+        manager.addSession(third.context);
+
+        manager.removeActiveSession();
+
+        assertEquals(3, manager.getSessions().size(), "removed visible session must stay registered until terminal pruning");
+        assertSame(second.context, manager.getActiveSession());
+        assertEquals(0, third.ui.destroyCalls, "active UI must not be destroyed synchronously from its own key handler");
+        assertEquals(1, third.transport.closeCalls, "removing active session must start closing it exactly once");
+
+        third.transport.fireClosed();
+        manager.pruneDeadSessions();
+
+        assertEquals(2, manager.getSessions().size());
+        assertEquals(1, third.ui.destroyCalls, "terminal pruning must dispose the removed session exactly once");
+
+        reset(manager);
+    }
+
+    @Test
+    @Tag("unit")
+    void switchToNextSkipsRetiringSessionRemovedByHotkey() {
+        SessionManager manager = SessionManager.getInstance();
+        reset(manager);
+        SessionFixture first = newContext("first");
+        SessionFixture second = newContext("second");
+        SessionFixture third = newContext("third");
+
+        manager.addSession(first.context);
+        manager.addSession(second.context);
+        manager.addSession(third.context);
+
+        manager.removeActiveSession();
+        manager.switchToNext();
+
+        assertSame(first.context, manager.getActiveSession(), "session cycling must not reselect a session already removed by hotkey");
+
+        reset(manager);
+    }
+
+    @Test
+    @Tag("unit")
     void pruneDeadSessionsRemovesTerminallyClosedSessions() {
         SessionManager manager = SessionManager.getInstance();
         reset(manager);
