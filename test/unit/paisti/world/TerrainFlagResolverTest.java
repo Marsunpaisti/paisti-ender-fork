@@ -24,6 +24,8 @@ class TerrainFlagResolverTest {
 
         assertEquals(expected, TerrainFlagResolver.flagsForTileResource("gfx/tiles/deep"));
         assertEquals(expected, TerrainFlagResolver.flagsForTileResource("gfx/tiles/odeep"));
+        assertEquals(expected, TerrainFlagResolver.flagsForTileResource("gfx/tiles/odeeper"));
+        assertEquals(expected, TerrainFlagResolver.flagsForTileResource("gfx/tiles/deep/edge"));
     }
 
     @Test
