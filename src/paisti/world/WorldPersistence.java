@@ -59,7 +59,13 @@ public class WorldPersistence implements AutoCloseable {
             return;
         if((clockMillis.getAsLong() - lastEnqueueMillis) < GRID_BATCH_DEBOUNCE_MS)
             return;
-        applyBatch(drainPendingGrids());
+        Map<Long, LoadedGrid> batch = drainPendingGrids();
+        try {
+            applyBatch(batch);
+        } catch(IOException e) {
+            requeueMissing(batch);
+            throw e;
+        }
     }
 
     private LoadedGrid snapshotGrid(MCache.Grid grid) {
@@ -114,7 +120,18 @@ public class WorldPersistence implements AutoCloseable {
     private synchronized void flushPendingNow() throws IOException {
         if(pendingGrids.isEmpty())
             return;
-        applyBatch(drainPendingGrids());
+        Map<Long, LoadedGrid> batch = drainPendingGrids();
+        try {
+            applyBatch(batch);
+        } catch(IOException e) {
+            requeueMissing(batch);
+            throw e;
+        }
+    }
+
+    private void requeueMissing(Map<Long, LoadedGrid> batch) {
+        for(Map.Entry<Long, LoadedGrid> entry : batch.entrySet())
+            pendingGrids.putIfAbsent(entry.getKey(), entry.getValue());
     }
 
     private Map<Long, LoadedGrid> drainPendingGrids() {

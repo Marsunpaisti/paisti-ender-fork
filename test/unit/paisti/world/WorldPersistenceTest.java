@@ -106,6 +106,32 @@ class WorldPersistenceTest {
         assertEquals(List.of("save"), calls);
     }
 
+    @Test
+    @Tag("unit")
+    void failedSaveKeepsBatchPendingForRetry() throws IOException {
+        TestClock clock = new TestClock();
+        WorldMap worldMap = new WorldMap();
+        List<String> calls = new ArrayList<>();
+        WorldPersistence persistence = new WorldPersistence(worldMap, clock::now, ignored -> {
+            calls.add("save");
+            if(calls.size() == 1)
+                throw new IOException("temporary failure");
+        });
+        byte[] flags = new byte[WorldMapConstants.CELL_COUNT];
+        flags[MapUtil.cellIndex(4, 6)] = (byte) WorldMapConstants.CELL_BLOCKED_TERRAIN;
+
+        persistence.enqueueLoadedGrids(List.of(new WorldPersistence.LoadedGrid(1001L, Coord.of(3, 4), Coord.of(300, 400), flags)));
+        clock.now = 500;
+
+        IOException error = org.junit.jupiter.api.Assertions.assertThrows(IOException.class, persistence::tick);
+        assertEquals("temporary failure", error.getMessage());
+
+        persistence.tick();
+
+        assertEquals(List.of("save", "save"), calls);
+        assertEquals(WorldMapConstants.CELL_BLOCKED_TERRAIN, worldMap.getCellFlags(1001L, 4, 6));
+    }
+
     private static class TestClock {
         long now;
 
