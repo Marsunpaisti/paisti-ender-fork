@@ -1,16 +1,6 @@
 package paisti.client.tabs;
 
-import java.awt.Color;
-import java.awt.Component;
-import java.awt.Dimension;
-import java.awt.EventQueue;
-import java.awt.Font;
-import java.awt.FontMetrics;
-import java.awt.Graphics;
-import java.awt.KeyEventDispatcher;
-import java.awt.KeyboardFocusManager;
-import java.awt.Panel;
-import java.awt.Rectangle;
+import java.awt.*;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
@@ -20,9 +10,11 @@ import java.util.List;
 
 public class PaistiClientTabBar extends Panel implements KeyEventDispatcher {
     static final int HEIGHT = 34;
-    static final int CONTROL_W = 32;
+    static final int CLOSE_W = 18;
     static final int TAB_MIN_W = 92;
     static final int TAB_MAX_W = 180;
+    static final int ADD_TAB_W = 130;
+    static final String ADD_LABEL = "+ Add new tab";
     static final Color BG = new Color(28, 31, 36);
     static final Color ACTIVE_BG = new Color(64, 103, 150);
     static final Color INACTIVE_BG = new Color(48, 52, 59);
@@ -89,9 +81,9 @@ public class PaistiClientTabBar extends Panel implements KeyEventDispatcher {
         g.setFont(getFont());
         for(HitRegion region : layoutRegionsForTests(w, h)) {
             if(region.kind == HitKind.ADD)
-                paintButton(g, region.rect, "+");
+                paintAddTab(g, region.rect);
             else if(region.kind == HitKind.CLOSE)
-                paintButton(g, region.rect, "x");
+                paintClose(g, region.rect);
             else
                 paintTab(g, region.rect, region.tab);
         }
@@ -101,28 +93,30 @@ public class PaistiClientTabBar extends Panel implements KeyEventDispatcher {
         List<HitRegion> regions = new ArrayList<>();
         int h = height <= 0 ? HEIGHT : height;
         int x = 4;
-        regions.add(new HitRegion(HitKind.ADD, new Rectangle(x, 4, CONTROL_W, h - 8), null));
-        x += CONTROL_W + 4;
-        PaistiClientTab active = manager.getActiveTab();
-        if(active != null) {
-            regions.add(new HitRegion(HitKind.CLOSE, new Rectangle(x, 4, CONTROL_W, h - 8), active));
-            x += CONTROL_W + 6;
-        }
         List<PaistiClientTab> tabs = manager.getTabs();
         int visibleTabs = 0;
         for(PaistiClientTab tab : tabs) {
             if(isVisibleTab(tab))
                 visibleTabs++;
         }
-        int available = Math.max(0, width - x - 4);
+        int addw = Math.min(TAB_MAX_W, Math.max(TAB_MIN_W, ADD_TAB_W));
+        int available = Math.max(0, width - x - addw - 7);
         int tabw = visibleTabs == 0 ? TAB_MIN_W : Math.max(TAB_MIN_W, Math.min(TAB_MAX_W, available / visibleTabs));
         for(PaistiClientTab tab : tabs) {
             if(!isVisibleTab(tab))
                 continue;
-            regions.add(new HitRegion(HitKind.TAB, new Rectangle(x, 4, tabw, h - 8), tab));
+            Rectangle tabRect = new Rectangle(x, 4, tabw, h - 8);
+            regions.add(new HitRegion(HitKind.TAB, tabRect, tab));
+            regions.add(new HitRegion(HitKind.CLOSE, closeRect(tabRect), tab));
             x += tabw + 3;
         }
+        regions.add(new HitRegion(HitKind.ADD, new Rectangle(x, 4, addw, h - 8), null));
         return regions;
+    }
+
+    private Rectangle closeRect(Rectangle tabRect) {
+        int size = Math.min(CLOSE_W, Math.max(12, tabRect.height - 8));
+        return new Rectangle(tabRect.x + tabRect.width - size - 6, tabRect.y + (tabRect.height - size) / 2, size, size);
     }
 
     private boolean isVisibleTab(PaistiClientTab tab) {
@@ -130,13 +124,20 @@ public class PaistiClientTabBar extends Panel implements KeyEventDispatcher {
     }
 
     private void click(int x, int y) {
-        for(HitRegion region : layoutRegionsForTests(getWidth(), getHeight())) {
+        List<HitRegion> regions = layoutRegionsForTests(getWidth(), getHeight());
+        for(HitRegion region : regions) {
+            if(region.kind != HitKind.CLOSE || !region.rect.contains(x, y))
+                continue;
+            manager.closeTab(region.tab);
+            refocusGame();
+            repaint();
+            return;
+        }
+        for(HitRegion region : regions) {
             if(!region.rect.contains(x, y))
                 continue;
             if(region.kind == HitKind.ADD)
                 manager.requestNewLoginTab();
-            else if(region.kind == HitKind.CLOSE)
-                manager.closeActiveTab();
             else if(region.kind == HitKind.TAB)
                 manager.activateTab(region.tab);
             refocusGame();
@@ -178,11 +179,16 @@ public class PaistiClientTabBar extends Panel implements KeyEventDispatcher {
         return((mods & required) == required && (mods & excluded) == 0);
     }
 
-    private void paintButton(Graphics g, Rectangle r, String label) {
+    private void paintAddTab(Graphics g, Rectangle r) {
         g.setColor(INACTIVE_BG);
         g.fillRoundRect(r.x, r.y, r.width, r.height, 8, 8);
         g.setColor(FG);
-        drawCentered(g, label, r);
+        drawCentered(g, ADD_LABEL, r);
+    }
+
+    private void paintClose(Graphics g, Rectangle r) {
+        g.setColor(MUTED_FG);
+        drawCentered(g, "x", r);
     }
 
     private void paintTab(Graphics g, Rectangle r, PaistiClientTab tab) {
@@ -191,7 +197,7 @@ public class PaistiClientTabBar extends Panel implements KeyEventDispatcher {
         g.fillRoundRect(r.x, r.y, r.width, r.height, 8, 8);
         g.setColor(active ? FG : MUTED_FG);
         FontMetrics fm = g.getFontMetrics();
-        String label = fitLabel(tab.label(), fm, r.width - 16);
+        String label = fitLabel(tab.label(), fm, r.width - CLOSE_W - 24);
         g.drawString(label, r.x + 8, r.y + ((r.height - fm.getHeight()) / 2) + fm.getAscent());
     }
 

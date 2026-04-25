@@ -179,6 +179,59 @@ class PaistiClientTabBarTest {
 
     @Test
     @Tag("unit")
+    void addRegionIsTrailingTabShapedEntry() {
+        PaistiClientTabManager manager = PaistiClientTabManager.getInstance();
+        manager.addLoginTab(new TestUI());
+        manager.addLoginTab(new TestUI());
+        PaistiClientTabBar bar = new PaistiClientTabBar(manager, new Canvas());
+
+        List<PaistiClientTabBar.HitRegion> regions = bar.layoutRegionsForTests(420, 34);
+        PaistiClientTabBar.HitRegion add = firstRegion(regions, PaistiClientTabBar.HitKind.ADD);
+        int rightMostTabEdge = regions.stream()
+                .filter(r -> r.kind == PaistiClientTabBar.HitKind.TAB)
+                .mapToInt(r -> r.rect.x + r.rect.width)
+                .max()
+                .orElseThrow(AssertionError::new);
+
+        assertTrue(add.rect.x > rightMostTabEdge, "add tab should appear after visible tabs");
+        assertTrue(add.rect.width >= PaistiClientTabBar.TAB_MIN_W, "add tab should be tab-shaped, not a small square button");
+    }
+
+    @Test
+    @Tag("unit")
+    void closeRegionsAreInsideTheirTabs() {
+        PaistiClientTabManager manager = PaistiClientTabManager.getInstance();
+        PaistiClientTab first = manager.addLoginTab(new TestUI());
+        PaistiClientTab second = manager.addLoginTab(new TestUI());
+        PaistiClientTabBar bar = new PaistiClientTabBar(manager, new Canvas());
+
+        List<PaistiClientTabBar.HitRegion> regions = bar.layoutRegionsForTests(420, 34);
+
+        assertTrue(regionForTab(regions, first).rect.contains(regionForCloseTab(regions, first).rect));
+        assertTrue(regionForTab(regions, second).rect.contains(regionForCloseTab(regions, second).rect));
+    }
+
+    @Test
+    @Tag("unit")
+    void closeClickClosesClickedInactiveTab() {
+        PaistiClientTabManager manager = PaistiClientTabManager.getInstance();
+        PaistiClientTab first = manager.addLoginTab(new TestUI());
+        TestUI secondUi = new TestUI();
+        PaistiClientTab second = manager.addLoginTab(secondUi);
+        manager.activateTab(first);
+        FocusProbe focus = new FocusProbe();
+        PaistiClientTabBar bar = sizedBar(manager, focus);
+
+        click(bar, regionForCloseTab(bar, second));
+
+        assertSame(first, manager.getActiveTab());
+        assertFalse(manager.getTabs().contains(second));
+        assertEquals(1, secondUi.destroyCalls);
+        assertEquals(1, focus.focusInWindowCalls);
+    }
+
+    @Test
+    @Tag("unit")
     void paintDoesNotRequireNativeWindow() {
         PaistiClientTabManager manager = PaistiClientTabManager.getInstance();
         manager.addLoginTab(new TestUI());
@@ -360,15 +413,34 @@ class PaistiClientTabBarTest {
     }
 
     private static PaistiClientTabBar.HitRegion firstRegion(PaistiClientTabBar bar, PaistiClientTabBar.HitKind kind) {
-        return bar.layoutRegionsForTests(bar.getWidth(), bar.getHeight()).stream()
+        return firstRegion(bar.layoutRegionsForTests(bar.getWidth(), bar.getHeight()), kind);
+    }
+
+    private static PaistiClientTabBar.HitRegion firstRegion(List<PaistiClientTabBar.HitRegion> regions, PaistiClientTabBar.HitKind kind) {
+        return regions.stream()
                 .filter(region -> region.kind == kind)
                 .findFirst()
                 .orElseThrow(AssertionError::new);
     }
 
     private static PaistiClientTabBar.HitRegion regionForTab(PaistiClientTabBar bar, PaistiClientTab tab) {
-        return bar.layoutRegionsForTests(bar.getWidth(), bar.getHeight()).stream()
+        return regionForTab(bar.layoutRegionsForTests(bar.getWidth(), bar.getHeight()), tab);
+    }
+
+    private static PaistiClientTabBar.HitRegion regionForTab(List<PaistiClientTabBar.HitRegion> regions, PaistiClientTab tab) {
+        return regions.stream()
                 .filter(region -> region.kind == PaistiClientTabBar.HitKind.TAB && region.tab == tab)
+                .findFirst()
+                .orElseThrow(AssertionError::new);
+    }
+
+    private static PaistiClientTabBar.HitRegion regionForCloseTab(PaistiClientTabBar bar, PaistiClientTab tab) {
+        return regionForCloseTab(bar.layoutRegionsForTests(bar.getWidth(), bar.getHeight()), tab);
+    }
+
+    private static PaistiClientTabBar.HitRegion regionForCloseTab(List<PaistiClientTabBar.HitRegion> regions, PaistiClientTab tab) {
+        return regions.stream()
+                .filter(region -> region.kind == PaistiClientTabBar.HitKind.CLOSE && region.tab == tab)
                 .findFirst()
                 .orElseThrow(AssertionError::new);
     }

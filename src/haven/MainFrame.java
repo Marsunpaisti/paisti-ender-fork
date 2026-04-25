@@ -26,16 +26,18 @@
 
 package haven;
 
+import javax.swing.*;
 import java.awt.*;
-import java.awt.event.*;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.io.*;
 import java.net.URL;
-import java.nio.file.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
-import java.lang.reflect.*;
 import java.util.List;
 
-public class MainFrame extends java.awt.Frame implements Console.Directory {
+public class MainFrame extends JFrame implements Console.Directory {
     private static final String TITLE = String.format("Haven & Hearth Paisti Ender fork (v%s)", Config.version);
     public static final Config.Variable<Boolean> initfullscreen = Config.Variable.propb("haven.fullscreen", false);
     public static final Config.Variable<String> renderer = Config.Variable.prop("haven.renderer", "jogl");
@@ -87,9 +89,33 @@ public class MainFrame extends java.awt.Frame implements Console.Directory {
     public static void initawt() {
 	try {
 	    System.setProperty("apple.awt.application.name", "Haven & Hearth");
-	    javax.swing.UIManager.setLookAndFeel(javax.swing.UIManager.getSystemLookAndFeelClassName());
+	    if(!initcustomlaf())
+		UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
 	} catch(Exception e) {
 	    new Warning(e, "AWT initialization failed").issue();
+	}
+    }
+
+    private static boolean initcustomlaf() {
+	try {
+	    Class<?> laf = Class.forName("paisti.client.ui.PaistiLookAndFeel");
+	    laf.getMethod("setup").invoke(null);
+	    return(true);
+	} catch(ClassNotFoundException e) {
+	    return(false);
+	} catch(ReflectiveOperationException e) {
+	    new Warning(e, "custom look and feel initialization failed").issue();
+	    return(false);
+	}
+    }
+
+    private static void applycustomchrome(JFrame frame) {
+	try {
+	    Class<?> laf = Class.forName("paisti.client.ui.PaistiLookAndFeel");
+	    laf.getMethod("applyWindowChrome", JFrame.class).invoke(null, frame);
+	} catch(ClassNotFoundException e) {
+	} catch(ReflectiveOperationException e) {
+	    new Warning(e, "custom window chrome initialization failed").issue();
 	}
     }
 
@@ -146,6 +172,7 @@ public class MainFrame extends java.awt.Frame implements Console.Directory {
 	    setVisible(false);
 	    dispose();
 	    setUndecorated(false);
+	    applycustomchrome(this);
 	    if(prefssz != null)
 		setSize(prefssz.x, prefssz.y);
 	    setVisible(true);
@@ -269,18 +296,22 @@ public class MainFrame extends java.awt.Frame implements Console.Directory {
 	    if((pfm != null) && !pfm.equals(Coord.z))
 		fsmode = findmode(pfm.x, pfm.y);
 	}
-	setLayout(new BorderLayout());
-	add(wrapRenderer(pp), BorderLayout.CENTER);
+	applycustomchrome(this);
+	getContentPane().setLayout(new BorderLayout());
+	getContentPane().add(wrapRenderer(pp), BorderLayout.CENTER);
 	pp.setPreferredSize(new Dimension(sz.x, sz.y));
 	pp.setSize(sz.x, sz.y);
 	pack();
 	setResizable(!Utils.getprefb("wndlock", false));
+	setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
 	seticon();
-	setVisible(true);
-	refocusRenderer();
 	addWindowListener(new WindowAdapter() {
 		public void windowClosing(WindowEvent e) {
-		    mt.interrupt();
+		    Thread mt = MainFrame.this.mt;
+		    if(mt != null)
+			mt.interrupt();
+		    else
+			dispose();
 		}
 
 		public void windowActivated(WindowEvent e) {
@@ -292,6 +323,8 @@ public class MainFrame extends java.awt.Frame implements Console.Directory {
 		    p.background(true);
 		}
 	    });
+	setVisible(true);
+	refocusRenderer();
 	if((isz == null) && Utils.getprefb("wndmax", false))
 	    setExtendedState(getExtendedState() | MAXIMIZED_BOTH);
     }

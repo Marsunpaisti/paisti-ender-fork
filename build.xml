@@ -97,6 +97,7 @@
     <pathelement path="lib/guava-33.2.1-jre.jar" />
     <pathelement path="lib/failureaccess-1.0.2.jar" />
     <pathelement path="lib/jsr305-3.0.2.jar" />
+    <pathelement path="lib/flatlaf-3.7.jar" />
   </path>
 
   <path id="junit5.classpath">
@@ -207,7 +208,7 @@
       <fileset file="changelog.txt" />
       <manifest>
 	<attribute name="Main-Class" value="paisti.client.PMainFrame" />
-	<attribute name="Class-Path" value="jogl-all.jar gluegen-rt.jar lwjgl-fat.jar lwjgl-awt.jar client-res.jar lwjgl-opengl-fat.jar steamworks4j.jar builtin-res.jar hafen-res.jar" />
+	<attribute name="Class-Path" value="jogl-all.jar gluegen-rt.jar lwjgl-fat.jar lwjgl-awt.jar client-res.jar lwjgl-opengl-fat.jar steamworks4j.jar builtin-res.jar hafen-res.jar flatlaf-3.7.jar" />
         <attribute name="Enable-Native-Access" value="ALL-UNNAMED" />
       </manifest>
     </jar>
@@ -230,6 +231,7 @@
       <fileset dir="lib">
 	<include name="builtin-res.jar" />
 	<include name="hafen-res.jar" />
+        <include name="flatlaf-3.7.jar" />
       </fileset>
     </copy>
     <copy todir="build">
@@ -251,6 +253,7 @@
 	<include name="hafen-res.jar" />
 	<include name="builtin-res.jar" />
       </fileset>
+      <fileset dir="lib"><include name="flatlaf-3.7.jar" /></fileset>
       <fileset dir="lib/ext/jogl"><include name="*.jar" /></fileset>
       <fileset dir="lib/ext/lwjgl"><include name="*.jar" /></fileset>
       <fileset dir="lib/ext/steamworks"><include name="*.jar" /></fileset>
@@ -270,6 +273,7 @@
 	<include name="hafen-res.jar" />
 	<include name="builtin-res.jar" />
       </fileset>
+      <fileset dir="lib"><include name="flatlaf-3.7.jar" /></fileset>
       <fileset dir="lib/ext/jogl"><include name="*.jar" /></fileset>
       <fileset dir="lib/ext/lwjgl"><include name="*.jar" /></fileset>
       <fileset dir="lib/ext/steamworks"><include name="*.jar" /></fileset>
