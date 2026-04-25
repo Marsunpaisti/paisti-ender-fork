@@ -19,6 +19,7 @@ public class DevToolsPlugin extends PaistiPlugin {
     private final DevToolsPluginSceneOverlay sceneOverlay = new DevToolsPluginSceneOverlay();
     private final DevToolsPluginScreenOverlay screenOverlay = new DevToolsPluginScreenOverlay();
     private final DevToolsPlayerCoordsOverlay coordsOverlay = new DevToolsPlayerCoordsOverlay();
+    private final DevToolsWorldPersistenceOverlay worldPersistenceOverlay = new DevToolsWorldPersistenceOverlay();
     EventBus.Subscriber outgoingWidgetMessageSubscriber;
 
     private boolean debugOutgoingWidgetMessages() {
@@ -44,6 +45,7 @@ public class DevToolsPlugin extends PaistiPlugin {
 	overlayManager().register(this, sceneOverlay);
 	overlayManager().register(this, screenOverlay);
 	overlayManager().register(this, coordsOverlay);
+        overlayManager().register(this, worldPersistenceOverlay);
     }
 
     @Override
