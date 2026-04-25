@@ -44,7 +44,11 @@ public class JOGLPanel extends GLCanvas implements GLPanel, Console.Directory {
     private JOGLEnvironment env = null;
     private Area shape;
     private Pipe base, wnd;
-    private final Loop main = new Loop(this);
+    private final Loop main = createLoop();
+
+    protected Loop createLoop() {
+	return(new Loop(this));
+    }
 
     public static class ProfileException extends Environment.UnavailableException {
 	public final String availability;

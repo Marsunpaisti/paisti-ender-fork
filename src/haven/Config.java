@@ -484,7 +484,7 @@ public class Config {
 	    });
     }
     
-    public static void initAutomapper(UI ui) {
+    public static synchronized void initAutomapper(UI ui) {
         if (MappingClient.initialized()) {
             MappingClient.destroy();
 	}

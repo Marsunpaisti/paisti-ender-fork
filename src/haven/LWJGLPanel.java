@@ -48,7 +48,11 @@ public class LWJGLPanel extends AWTGLCanvas implements GLPanel, Console.Director
     private boolean aswap;
     private Area shape;
     private Pipe base, wnd;
-    private final Loop main = new Loop(this);
+    private final Loop main = createLoop();
+
+    protected Loop createLoop() {
+	return(new Loop(this));
+    }
 
     public LWJGLPanel() {
 	super();

@@ -26,11 +26,6 @@
 
 package haven;
 
-import haven.session.SessionRunner;
-import paisti.client.PaistiSessions;
-
-
-
 import java.awt.*;
 import java.awt.event.*;
 import java.io.*;
@@ -51,6 +46,28 @@ public class MainFrame extends java.awt.Frame implements Console.Directory {
     boolean fullscreen;
     DisplayMode fsmode = null, prefs = null;
     Coord prefssz = null;
+
+    public static class ClientFactory {
+	public MainFrame createFrame(Coord isz) {
+	    return(new MainFrame(isz));
+	}
+
+	public UI.Runner sessionRunner(RemoteUI remote) {
+	    return(remote);
+	}
+
+	public UI.Runner replayRunner(RemoteUI remote) {
+	    return(remote);
+	}
+
+	public Session connect(java.net.SocketAddress server, Session.User user, boolean encrypt, byte[] cookie, Object... args) throws InterruptedException {
+	    return(Session.connect(server, user, encrypt, cookie, args));
+	}
+
+	public Session create(Transport conn, Session.User user) {
+	    return(new Session(conn, user));
+	}
+    }
 
     public static void initlocale() {
 	try {
@@ -145,6 +162,7 @@ public class MainFrame extends java.awt.Frame implements Console.Directory {
 		    if(args.length == 3) {
 			int w = Integer.parseInt(args[1]),
 			    h = Integer.parseInt(args[2]);
+			((Component)p).setPreferredSize(new Dimension(w, h));
 			p.setSize(w, h);
 			pack();
 			Utils.setprefc("wndsz", new Coord(w, h));
@@ -206,7 +224,7 @@ public class MainFrame extends java.awt.Frame implements Console.Directory {
 	}
     }
 
-    private UIPanel renderer() {
+    protected UIPanel renderer() {
 	String id = renderer.get();
 	switch(id) {
 	case "jogl":
@@ -216,6 +234,22 @@ public class MainFrame extends java.awt.Frame implements Console.Directory {
 	default:
 	    throw(new RuntimeException("invalid renderer specified in haven.renderer: " + id));
 	}
+    }
+
+    protected Component wrapRenderer(Component renderer) {
+	return(renderer);
+    }
+
+    protected UI.Runner defaultRunner() {
+	return(new Bootstrap());
+    }
+
+    private void refocusRenderer() {
+	EventQueue.invokeLater(() -> {
+	    Component renderer = (Component)p;
+	    if(!renderer.requestFocusInWindow())
+		renderer.requestFocus();
+	});
     }
 
     public MainFrame(Coord isz) {
@@ -235,13 +269,15 @@ public class MainFrame extends java.awt.Frame implements Console.Directory {
 	    if((pfm != null) && !pfm.equals(Coord.z))
 		fsmode = findmode(pfm.x, pfm.y);
 	}
-	add(pp);
+	setLayout(new BorderLayout());
+	add(wrapRenderer(pp), BorderLayout.CENTER);
+	pp.setPreferredSize(new Dimension(sz.x, sz.y));
 	pp.setSize(sz.x, sz.y);
 	pack();
 	setResizable(!Utils.getprefb("wndlock", false));
-	pp.requestFocus();
 	seticon();
 	setVisible(true);
+	refocusRenderer();
 	addWindowListener(new WindowAdapter() {
 		public void windowClosing(WindowEvent e) {
 		    mt.interrupt();
@@ -249,6 +285,7 @@ public class MainFrame extends java.awt.Frame implements Console.Directory {
 
 		public void windowActivated(WindowEvent e) {
 		    p.background(false);
+		    refocusRenderer();
 		}
 
 		public void windowDeactivated(WindowEvent e) {
@@ -282,6 +319,10 @@ public class MainFrame extends java.awt.Frame implements Console.Directory {
     }
 
     public static Session connect(Object[] args) {
+	return(connect(args, new ClientFactory()));
+    }
+
+    public static Session connect(Object[] args, ClientFactory factory) {
 	Session.User acct;
 	byte[] cookie;
 	NamedSocketAddress gameserv = (Bootstrap.gameserv.get() != null) ?
@@ -321,7 +362,7 @@ public class MainFrame extends java.awt.Frame implements Console.Directory {
 	    }
 	}
 	try {
-	    return(PaistiSessions.connect(new java.net.InetSocketAddress(java.net.InetAddress.getByName(gameserv.host), gameserv.port), acct, Connection.encrypt.get(), cookie, args));
+	    return(factory.connect(new java.net.InetSocketAddress(java.net.InetAddress.getByName(gameserv.host), gameserv.port), acct, Connection.encrypt.get(), cookie, args));
 	} catch(Connection.SessionError e) {
 	    throw(new ConnectionError(e.getMessage()));
 	} catch(InterruptedException exc) {
@@ -335,7 +376,7 @@ public class MainFrame extends java.awt.Frame implements Console.Directory {
 	UI.Runner fun = null;
 	while(true) {
 	    if(fun == null)
-		fun = new Bootstrap();
+		fun = defaultRunner();
 	    String t = fun.title();
 	    if(t == null)
 		setTitle(TITLE);
@@ -457,7 +498,7 @@ public class MainFrame extends java.awt.Frame implements Console.Directory {
 	}
     }
 
-    private static void main2(String[] args) {
+    private static void main2(String[] args, ClientFactory factory) {
 	initfullscreen.set(CFG.VIDEO_FULL_SCREEN.get());
 	Config.cmdline(args);
 	status("start");
@@ -471,7 +512,7 @@ public class MainFrame extends java.awt.Frame implements Console.Directory {
 	if(Bootstrap.replay.get() != null) {
 	    try {
 		Transport.Playback player = new Transport.Playback(Files.newBufferedReader(Bootstrap.replay.get(), Utils.utf8));
-		fun = new RemoteUI(PaistiSessions.create(player, new Session.User("Playback")));
+		fun = factory.replayRunner(new RemoteUI(factory.create(player, new Session.User("Playback"))));
 		player.start();
 	    } catch(IOException e) {
 		System.err.println("hafen: " + e.getMessage());
@@ -479,13 +520,13 @@ public class MainFrame extends java.awt.Frame implements Console.Directory {
 	    }
 	} else if(Bootstrap.servargs.get() != null) {
 	    try {
-		fun = new SessionRunner(new RemoteUI(connect(Bootstrap.servargs.get())));
+		fun = factory.sessionRunner(new RemoteUI(connect(Bootstrap.servargs.get(), factory)));
 	    } catch(ConnectionError e) {
 		System.err.println("hafen: " + e.getMessage());
 		System.exit(1);
 	    }
 	}
-	MainFrame f = new MainFrame(null);
+	MainFrame f = factory.createFrame(null);
 	status("visible");
 	if(initfullscreen.get())
 	    f.setfs();
@@ -496,6 +537,10 @@ public class MainFrame extends java.awt.Frame implements Console.Directory {
     }
     
     public static void main(final String[] args) {
+	main(args, new ClientFactory());
+    }
+
+    public static void main(final String[] args, ClientFactory factory) {
 	/* Set up the error handler as early as humanly possible. */
 	ThreadGroup g = new ThreadGroup("Haven main group");
 	String ed = Config.get().getprop("haven.errorurl", "");
@@ -518,7 +563,7 @@ public class MainFrame extends java.awt.Frame implements Console.Directory {
 	    g = hg;
 	    new DeadlockWatchdog(hg).start();
 	}
-	Thread main = new HackThread(g, () -> main2(args), "Haven main thread");
+	Thread main = new HackThread(g, () -> main2(args, factory), "Haven main thread");
 	main.start();
     }
 	

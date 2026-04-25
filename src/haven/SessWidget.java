@@ -27,9 +27,18 @@
 package haven;
 
 import java.net.*;
-import paisti.client.PaistiSessions;
 
 public class SessWidget extends AWidget {
+    public interface Connector {
+	Session connect(SocketAddress address, Session.User acct, boolean encrypt, byte[] cookie, Object... args) throws InterruptedException;
+    }
+
+    private static Connector connector = Session::connect;
+
+    public static void setConnector(Connector connector) {
+	SessWidget.connector = connector;
+    }
+
     private final Defer.Future<Result> conn;
     private boolean rep = false;
 
@@ -65,7 +74,7 @@ public class SessWidget extends AWidget {
 			return(new Result(null, new Connection.SessionConnError()));
 		    }
 		    try {
-			return(new Result(PaistiSessions.connect(new InetSocketAddress(host, port), acct, encrypt, cookie, args), null));
+			return(new Result(connector.connect(new InetSocketAddress(host, port), acct, encrypt, cookie, args), null));
 		    } catch(Connection.SessionError err) {
 			return(new Result(null, err));
 		    }

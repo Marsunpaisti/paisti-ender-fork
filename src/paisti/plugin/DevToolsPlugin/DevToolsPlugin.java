@@ -21,7 +21,7 @@ public class DevToolsPlugin extends PaistiPlugin {
     private final DevToolsPlayerCoordsOverlay coordsOverlay = new DevToolsPlayerCoordsOverlay();
     EventBus.Subscriber outgoingWidgetMessageSubscriber;
 
-    private boolean debugOutgoingWidgetMessages(){
+    private boolean debugOutgoingWidgetMessages() {
 	return true;
     }
 
@@ -29,10 +29,10 @@ public class DevToolsPlugin extends PaistiPlugin {
 	super(services);
     }
 
-    private void logOutgoingWidgetMessage(BeforeOutgoingWidgetMessage event){
+    private void logOutgoingWidgetMessage(BeforeOutgoingWidgetMessage event) {
 	if(debugOutgoingWidgetMessages()) {
 	    System.out.println(event.toString());
-	    if (ui() != null) {
+	    if(ui() != null) {
 		ui().msg(event.toString(), Color.WHITE, null);
 	    }
 	}

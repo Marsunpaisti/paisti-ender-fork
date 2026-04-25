@@ -32,10 +32,6 @@ import haven.render.gl.*;
 import java.awt.Cursor;
 import java.awt.Toolkit;
 import haven.JOGLPanel.SyncMode;
-import haven.session.LobbyRunner;
-import haven.session.SessionContext;
-import haven.session.SessionManager;
-import paisti.client.PUI;
 
 public interface GLPanel extends UIPanel, UI.Context {
     public GLEnvironment env();
@@ -66,7 +62,65 @@ public interface GLPanel extends UIPanel, UI.Context {
 	}
 
 	protected UI makeui(UI.Runner fun) {
-	    return(new PUI(p, new Coord(p.getSize()), fun));
+	    return(new UI(p, new Coord(p.getSize()), fun));
+	}
+
+	protected UI syncActiveUi(UI current) {
+	    return(current);
+	}
+
+	protected boolean isManagedUi(UI ui) {
+	    return(false);
+	}
+
+	protected boolean isManagedSessionUi(UI ui) {
+	    return(false);
+	}
+
+	protected void pruneManagedSessions() {
+	}
+
+	protected UI handlePrunedManagedUi(UI visibleUi) {
+	    return(visibleUi);
+	}
+
+	protected void tickBackgroundManagedSessions(UI visibleUi) {
+	}
+
+	protected boolean serviceVisibleManagedSession(UI visibleUi) {
+	    return(true);
+	}
+
+	protected boolean isActiveManagedUi(UI ui) {
+	    return(true);
+	}
+
+	protected void registerNewUi(UI.Runner runner, UI previousUi, UI newUi) {
+	}
+
+	protected UI reuseManagedUiForRunner(UI.Runner runner) {
+	    return(null);
+	}
+
+	protected void initializeUi(UI ui) {
+	    ui.env = p.env();
+	    if(p.getParent() instanceof Console.Directory)
+		ui.cons.add((Console.Directory)p.getParent());
+	    if(p instanceof Console.Directory)
+		ui.cons.add((Console.Directory)p);
+	    ui.cons.add(this);
+	    ui.root.guprof = uprof;
+	    ui.root.grprof = rprof;
+	    ui.root.ggprof = gprof;
+	}
+
+	protected UI setCurrentUi(UI ui) {
+	    synchronized(uilock) {
+		this.ui = ui;
+		this.lockedui = ui;
+		uilock.notifyAll();
+		return(this.ui);
+	    }
 	}
 
 	private void onLoopTeardown() {
@@ -75,7 +129,7 @@ public interface GLPanel extends UIPanel, UI.Context {
 		lastui = this.ui;
 		this.ui = null;
 	    }
-	    if(lastui != null && !SessionManager.getInstance().isSessionUi(lastui)) {
+	    if(lastui != null && !isManagedUi(lastui)) {
 		synchronized(lastui) {
 		    lastui.destroy();
 		}
@@ -343,155 +397,10 @@ public interface GLPanel extends UIPanel, UI.Context {
 		}
 		streamout.accept(buf, state);
 	    }
-	}
-
-	/**
-	 * Poll and dispatch UI messages for background registered sessions,
-	 * then CPU-tick and issue map requests for them.
-	 * The visible session is handled separately by serviceVisibleSession().
-	 */
-	private void tickBackgroundSessions(UI visibleUi) {
-	    SessionManager mgr = SessionManager.getInstance();
-	    for(SessionContext ctx : mgr.getSessions()) {
-		UI sui = ctx.ui;
-		if(sui == null || sui == visibleUi || !ctx.isSelectable())
-		    continue;
-		synchronized(sui) {
-		    boolean returnHit = false;
-		    if(ctx.session != null && ctx.remoteUI != null) {
-			PMessage msg;
-			while((msg = ctx.session.pollUIMsg()) != null) {
-			    if(msg instanceof RemoteUI.Return) {
-				/* MVP: session handoff unsupported.  Close
-				 * the returned session to avoid leaks and
-				 * initiate shutdown on this context.  Do NOT
-				 * remove/dispose here — let pruneDeadSessions
-				 * handle final teardown once the session is
-				 * terminal. */
-				Session returned = ((RemoteUI.Return)msg).ret;
-				if(returned != null) {
-				    try { returned.close(); } catch(Exception e) { new Warning(e, "closing leaked Return session").issue(); }
-				}
-				ctx.close();
-				returnHit = true;
-				break;
-			    }
-			    try {
-				if(!ctx.remoteUI.dispatchMessage(msg, sui))
-				    break;
-			    } catch(InterruptedException e) {
-				Thread.currentThread().interrupt();
-				return;
-			    }
-			}
-		    }
-		    /* Skip CPU tick / map requests if this session just hit Return */
-		    if(!returnHit) {
-			if(sui.sess != null && sui.sess.glob != null) {
-			    sui.sess.glob.ctick();
-			    sui.sess.glob.map.sendreqs();
-			}
-			sui.tick();
-		    }
-		}
 	    }
-	}
 
-	/**
-	 * Service queued UI messages for the visible session if it is a
-	 * managed session.  Returns false if the visible session hit a
-	 * Return and the caller must skip the rest of the frame.
-	 */
-	private boolean serviceVisibleSession(UI visibleUi) {
-	    SessionManager mgr = SessionManager.getInstance();
-	    SessionContext ctx = null;
-	    for(SessionContext c : mgr.getSessions()) {
-		if(c.ui == visibleUi) {
-		    ctx = c;
-		    break;
-		}
-	    }
-	    if(ctx == null || ctx.session == null || ctx.remoteUI == null)
-		return(true);
-	    synchronized(visibleUi) {
-		PMessage msg;
-		while((msg = ctx.session.pollUIMsg()) != null) {
-		    if(msg instanceof RemoteUI.Return) {
-			Session returned = ((RemoteUI.Return)msg).ret;
-			/* Initiate shutdown on the old session */
-			ctx.close();
-			mgr.retireActive(ctx);
-
-			if(returned != null) {
-			    /* Transition: build a replacement context for
-			     * the returned session, mirroring newui() and
-			     * SessionRunner.run() setup. */
-			    RemoteUI newRemote = new RemoteUI(returned);
-			    UI newUi = makeui(newRemote);
-			    newUi.env = p.env();
-			    if(p.getParent() instanceof Console.Directory)
-				newUi.cons.add((Console.Directory)p.getParent());
-			    if(p instanceof Console.Directory)
-				newUi.cons.add((Console.Directory)p);
-			    newUi.cons.add(this);
-			    newUi.root.guprof = uprof;
-			    newUi.root.grprof = rprof;
-			    newUi.root.ggprof = gprof;
-			    newRemote.attach(newUi);
-			    newRemote.init(newUi);
-			    mgr.addSession(new SessionContext(returned, newUi, newRemote));
-			    synchronized(uilock) {
-				this.ui = newUi;
-			    }
-			} else {
-			    /* Null returned session — fall back to next
-			     * live session or wake login flow. */
-			    synchronized(uilock) {
-				SessionContext next = mgr.getActiveSession();
-				if(next != null && next.ui != null) {
-				    this.ui = next.ui;
-				} else {
-				    mgr.requestAddAccount();
-				}
-			    }
-			}
-			return(false);
-		    }
-		    try {
-			if(!ctx.remoteUI.dispatchMessage(msg, visibleUi))
-			    break;
-		    } catch(InterruptedException e) {
-			Thread.currentThread().interrupt();
-			return(true);
-		    }
-		}
-	    }
-	    return(true);
-	}
-
-	/**
-	 * After pruning, check whether the visible UI belonged to a
-	 * session that was just removed.  If so, rebind to a live
-	 * successor or null (waking the login flow).
-	 *
-	 * @return the UI to continue the frame with, or null if no
-	 *         successor exists and the frame should be skipped.
-	 */
 	UI handlePrunedVisibleSession(UI visibleUi) {
-	    SessionManager mgr = SessionManager.getInstance();
-	    if(mgr.isSessionUi(visibleUi))
-		return(visibleUi);
-	    synchronized(uilock) {
-		SessionContext successor = mgr.getActiveSession();
-		if(successor != null && successor.ui != null) {
-		    this.ui = successor.ui;
-		} else {
-		    this.ui = null;
-		    mgr.requestAddAccount();
-		}
-		this.lockedui = this.ui;
-		return(this.ui);
-	    }
+	    return(handlePrunedManagedUi(visibleUi));
 	}
 
 	public void run() throws InterruptedException {
@@ -509,17 +418,9 @@ public interface GLPanel extends UIPanel, UI.Context {
 		    UI ui;
 		    boolean uiWasSession;
 		    synchronized(uilock) {
-			/* Sync this.ui with the active session, but only when
-			 * the current UI is already a managed session UI (or
-			 * null).  Never override a standalone login/bootstrap UI. */
-			SessionManager mgr = SessionManager.getInstance();
-			SessionContext active = mgr.getActiveSession();
-			if(active != null && active.ui != null && active.ui != this.ui
-			   && (this.ui == null || mgr.isSessionUi(this.ui))) {
-			    this.ui = active.ui;
-			}
-		    this.lockedui = ui = this.ui;
-			uiWasSession = (ui != null && mgr.isSessionUi(ui));
+			this.ui = syncActiveUi(this.ui);
+			this.lockedui = ui = this.ui;
+			uiWasSession = (ui != null && isManagedSessionUi(ui));
 			uilock.notifyAll();
 		    }
 		    /* If no UI is installed yet (e.g. after session pruning
@@ -557,12 +458,12 @@ public interface GLPanel extends UIPanel, UI.Context {
 		    }
 
 		    int cfno = frameno++;
-		    /* Prune dead/terminal sessions before ticking */
-		    SessionManager.getInstance().pruneDeadSessions();
-		    /* If the visible session was just pruned, rebind to a
+		    /* Prune dead/terminal managed sessions before ticking */
+		    pruneManagedSessions();
+		    /* If the visible managed session was just pruned, rebind to a
 		     * successor or enter a safe state. */
 		    if(uiWasSession) {
-			UI rebound = handlePrunedVisibleSession(ui);
+			UI rebound = handlePrunedManagedUi(ui);
 			if(rebound != ui) {
 			    ui = rebound;
 			    if(ui == null) {
@@ -572,13 +473,13 @@ public interface GLPanel extends UIPanel, UI.Context {
 			    }
 			}
 		    }
-		    /* Service background sessions */
-		    tickBackgroundSessions(ui);
-		    /* Service the visible session's message queue; if it was
+		    /* Service background managed sessions */
+		    tickBackgroundManagedSessions(ui);
+		    /* Service the visible managed session's message queue; if it was
 		     * destroyed (e.g. RemoteUI.Return), skip the rest of
 		     * this frame — the next iteration will pick up the
 		     * replacement UI via the uilock sync. */
-		    if(!serviceVisibleSession(ui)) {
+		    if(!serviceVisibleManagedSession(ui)) {
 			env.submit(buf);
 			buf = null;
 			continue;
@@ -587,7 +488,7 @@ public interface GLPanel extends UIPanel, UI.Context {
 		    synchronized(ui) {
 			CPUProfile.phase(curf, "dsp");
 			ed.dispatch(ui);
-			if(uiWasSession && !SessionManager.getInstance().isActiveSessionUi(ui)) {
+			if(isManagedSessionUi(ui) && !isActiveManagedUi(ui)) {
 			    env.submit(buf);
 			    buf = null;
 			    continue;
@@ -685,30 +586,16 @@ public interface GLPanel extends UIPanel, UI.Context {
 	}
 
 	public UI newui(UI.Runner fun) {
-	    SessionManager mgr = SessionManager.getInstance();
-
-	    /* If transitioning to LobbyRunner and the active session's UI is
-	     * our current UI, reuse it instead of creating a throwaway. */
-	    if(fun instanceof LobbyRunner) {
-		SessionContext active = mgr.getActiveSession();
-		if(active != null && active.ui == this.ui) {
-		    return(this.ui);
-		}
-	    }
+	    UI reuse = reuseManagedUiForRunner(fun);
+	    if(reuse != null)
+		return(reuse);
 
 	    UI prevui, newui = makeui(fun);
-	    newui.env = p.env();
-	    if(p.getParent() instanceof Console.Directory)
-		newui.cons.add((Console.Directory)p.getParent());
-	    if(p instanceof Console.Directory)
-		newui.cons.add((Console.Directory)p);
-	    newui.cons.add(this);
+	    initializeUi(newui);
 	    synchronized(uilock) {
 		prevui = this.ui;
 		ui = newui;
-		ui.root.guprof = uprof;
-		ui.root.grprof = rprof;
-		ui.root.ggprof = gprof;
+		registerNewUi(fun, prevui, newui);
 		while((this.lockedui != null) && (this.lockedui == prevui)) {
 		    try {
 			uilock.wait();
@@ -718,9 +605,8 @@ public interface GLPanel extends UIPanel, UI.Context {
 		    }
 		}
 	    }
-	    /* Do not destroy a UI that is registered with SessionManager;
-	     * its SessionContext owns the lifecycle via dispose(). */
-	    if(prevui != null && !mgr.isSessionUi(prevui)) {
+	    /* Managed UI lifecycles are owned by the overriding loop. */
+	    if(prevui != null && !isManagedUi(prevui)) {
 		synchronized(prevui) {
 		    prevui.destroy();
 		}

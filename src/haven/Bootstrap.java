@@ -26,9 +26,6 @@
 
 package haven;
 
-import haven.session.SessionRunner;
-import paisti.client.PaistiSessions;
-
 import java.io.*;
 import java.net.*;
 import java.util.*;
@@ -315,7 +312,7 @@ public class Bootstrap implements UI.Receiver, UI.Runner {
 			if(i > 0)
 			    ui.uimsg(1, "prg", String.format("Connecting (address %d/%d)...", i + 1, addrs.size()));
 			try {
-			    sess = PaistiSessions.connect(addrs.get(i), acct, Connection.encrypt.get(), cookie);
+			    sess = Session.connect(addrs.get(i), acct, Connection.encrypt.get(), cookie);
 			    sess.ui = ui;
 			    break connect;
 			} catch(Connection.SessionConnError err) {
@@ -337,7 +334,7 @@ public class Bootstrap implements UI.Receiver, UI.Runner {
 	} while(true);
 	ui.destroy(1);
 	haven.error.ErrorHandler.setprop("usr", sess.user.name);
-	return(new SessionRunner(new RemoteUI(sess)));
+	return(new RemoteUI(sess));
     }
 
     public void rcvmsg(int widget, String msg, Object... args) {

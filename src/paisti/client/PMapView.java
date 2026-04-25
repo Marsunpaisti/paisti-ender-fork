@@ -1,6 +1,9 @@
 package paisti.client;
 
-import haven.*;
+import haven.Coord;
+import haven.Coord2d;
+import haven.Glob;
+import haven.MapView;
 
 public class PMapView extends MapView {
     public PMapView(Coord sz, Glob glob, Coord2d cc, long plgob) {
