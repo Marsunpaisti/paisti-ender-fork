@@ -858,8 +858,11 @@ public class MapWnd extends WindowX implements Console.Directory {
 		mremove = null;
 		if(colsel != null) {
 		    ui.destroy(colsel);
-		    ui.destroy(onmapbtn);
 		    colsel = null;
+		}
+		if(onmapbtn != null) {
+		    ui.destroy(onmapbtn);
+		    onmapbtn = null;
 		}
 		if(mtrack != null) {
 		    ui.destroy(mtrack);
@@ -1424,7 +1427,8 @@ public class MapWnd extends WindowX implements Console.Directory {
 		namesel.c = listf.c.add(0, listf.sz.y + UI.scale(5));
 		if(colsel != null) {
 		    colsel.c = namesel.c.add(0, namesel.sz.y + UI.scale(5));
-		    onmapbtn.c =  colsel.c.add(0,  colsel.sz.y + UI.scale(5));
+		    if(onmapbtn != null)
+			onmapbtn.c =  colsel.c.add(0,  colsel.sz.y + UI.scale(5));
 		}
 		int y = namesel.sz.y + BuddyWnd.margin3 + UI.scale(30);
 		mremove.c = namesel.c.add(0, y);
