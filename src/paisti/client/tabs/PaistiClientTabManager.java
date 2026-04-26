@@ -188,6 +188,10 @@ public class PaistiClientTabManager {
         return activeTab == null ? null : activeTab.ui();
     }
 
+    public synchronized UI getActiveUiOrDefault(UI defaultUi) {
+        return activeTab == null ? defaultUi : activeTab.ui();
+    }
+
     public synchronized List<PaistiSessionContext> getSessionContexts() {
         List<PaistiSessionContext> contexts = new ArrayList<>();
         for(PaistiClientTab tab : tabs) {

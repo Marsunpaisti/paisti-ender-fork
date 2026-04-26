@@ -131,6 +131,19 @@ class PaistiClientTabBarTest {
         }
     }
 
+    private static final class PaintProbeTabBar extends PaistiClientTabBar {
+        private int paintCalls;
+
+        private PaintProbeTabBar(PaistiClientTabManager manager) {
+            super(manager, new Canvas());
+        }
+
+        @Override
+        public void paint(java.awt.Graphics g) {
+            paintCalls++;
+        }
+    }
+
     @BeforeEach
     @AfterEach
     void clearTabs() {
@@ -232,6 +245,46 @@ class PaistiClientTabBarTest {
 
     @Test
     @Tag("unit")
+    void mouseMoveTracksHoveredTab() {
+        PaistiClientTabManager manager = PaistiClientTabManager.getInstance();
+        PaistiClientTab tab = manager.addLoginTab(new TestUI());
+        PaistiClientTabBar bar = sizedBar(manager, new Canvas());
+
+        move(bar, regionForTab(bar, tab));
+
+        assertSame(tab, bar.hoveredTabForTests());
+        assertEquals(PaistiClientTabBar.HitKind.TAB, bar.hoveredKindForTests());
+    }
+
+    @Test
+    @Tag("unit")
+    void mouseMovePrefersCloseHoverOverContainingTab() {
+        PaistiClientTabManager manager = PaistiClientTabManager.getInstance();
+        PaistiClientTab tab = manager.addLoginTab(new TestUI());
+        PaistiClientTabBar bar = sizedBar(manager, new Canvas());
+
+        move(bar, regionForCloseTab(bar, tab));
+
+        assertSame(tab, bar.hoveredTabForTests());
+        assertEquals(PaistiClientTabBar.HitKind.CLOSE, bar.hoveredKindForTests());
+    }
+
+    @Test
+    @Tag("unit")
+    void mouseExitClearsHoverState() {
+        PaistiClientTabManager manager = PaistiClientTabManager.getInstance();
+        PaistiClientTab tab = manager.addLoginTab(new TestUI());
+        PaistiClientTabBar bar = sizedBar(manager, new Canvas());
+
+        move(bar, regionForTab(bar, tab));
+        bar.dispatchEvent(new MouseEvent(bar, MouseEvent.MOUSE_EXITED, System.currentTimeMillis(), 0, -1, -1, 0, false));
+
+        assertSame(null, bar.hoveredTabForTests());
+        assertSame(null, bar.hoveredKindForTests());
+    }
+
+    @Test
+    @Tag("unit")
     void paintDoesNotRequireNativeWindow() {
         PaistiClientTabManager manager = PaistiClientTabManager.getInstance();
         manager.addLoginTab(new TestUI());
@@ -242,6 +295,21 @@ class PaistiClientTabBarTest {
         bar.paint(img.getGraphics());
 
         assertEquals(320, img.getWidth());
+    }
+
+    @Test
+    @Tag("unit")
+    void updatePaintsWithoutClearingBackgroundFirst() {
+        PaintProbeTabBar bar = new PaintProbeTabBar(PaistiClientTabManager.getInstance());
+        bar.setSize(20, 20);
+        bar.setBackground(java.awt.Color.GREEN);
+        BufferedImage img = new BufferedImage(20, 20, BufferedImage.TYPE_INT_ARGB);
+        img.setRGB(0, 0, java.awt.Color.MAGENTA.getRGB());
+
+        bar.update(img.getGraphics());
+
+        assertEquals(1, bar.paintCalls);
+        assertEquals(java.awt.Color.MAGENTA.getRGB(), img.getRGB(0, 0));
     }
 
     @Test
@@ -319,6 +387,38 @@ class PaistiClientTabBarTest {
 
     @Test
     @Tag("unit")
+    void tabPressReleaseActivatesTabWithoutClickedEvent() {
+        PaistiClientTabManager manager = PaistiClientTabManager.getInstance();
+        PaistiClientTab first = manager.addLoginTab(new TestUI());
+        PaistiClientTab second = manager.addLoginTab(new TestUI());
+        manager.activateTab(first);
+        FocusProbe focus = new FocusProbe();
+        PaistiClientTabBar bar = sizedBar(manager, focus);
+
+        pressRelease(bar, regionForTab(bar, second));
+
+        assertSame(second, manager.getActiveTab());
+        assertEquals(1, focus.focusInWindowCalls);
+    }
+
+    @Test
+    @Tag("unit")
+    void mismatchedPressReleaseSuppressesFollowingClickedEvent() {
+        PaistiClientTabManager manager = PaistiClientTabManager.getInstance();
+        PaistiClientTab first = manager.addLoginTab(new TestUI());
+        PaistiClientTab second = manager.addLoginTab(new TestUI());
+        manager.activateTab(first);
+        FocusProbe focus = new FocusProbe();
+        PaistiClientTabBar bar = sizedBar(manager, focus);
+
+        pressReleaseClick(bar, regionForTab(bar, first), regionForTab(bar, second));
+
+        assertSame(first, manager.getActiveTab());
+        assertEquals(0, focus.focusInWindowCalls);
+    }
+
+    @Test
+    @Tag("unit")
     void tabClickActivatesPendingLoginTabAndRefocusesGame() {
         PaistiClientTabManager manager = PaistiClientTabManager.getInstance();
         PaistiClientTab first = manager.addPendingLoginTab();
@@ -348,6 +448,40 @@ class PaistiClientTabBarTest {
         assertTrue(((KeyEventDispatcher)bar).dispatchKeyEvent(event));
 
         assertSame(second, manager.getActiveTab());
+        assertTrue(event.isConsumed());
+    }
+
+    @Test
+    @Tag("unit")
+    void ctrlTabSwitchesToNextClientTab() {
+        PaistiClientTabManager manager = PaistiClientTabManager.getInstance();
+        PaistiClientTab first = manager.addPendingLoginTab();
+        PaistiClientTab second = manager.addPendingLoginTab();
+        manager.activateTab(first);
+        PaistiClientTabBar bar = sizedBar(manager, new Canvas());
+        KeyEvent event = new KeyEvent(bar, KeyEvent.KEY_PRESSED, System.currentTimeMillis(),
+                InputEvent.CTRL_DOWN_MASK, KeyEvent.VK_TAB, KeyEvent.CHAR_UNDEFINED);
+
+        assertTrue(((KeyEventDispatcher)bar).dispatchKeyEvent(event));
+
+        assertSame(second, manager.getActiveTab());
+        assertTrue(event.isConsumed());
+    }
+
+    @Test
+    @Tag("unit")
+    void ctrlShiftTabSwitchesToPreviousClientTab() {
+        PaistiClientTabManager manager = PaistiClientTabManager.getInstance();
+        PaistiClientTab first = manager.addPendingLoginTab();
+        PaistiClientTab second = manager.addPendingLoginTab();
+        manager.activateTab(second);
+        PaistiClientTabBar bar = sizedBar(manager, new Canvas());
+        KeyEvent event = new KeyEvent(bar, KeyEvent.KEY_PRESSED, System.currentTimeMillis(),
+                InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK, KeyEvent.VK_TAB, KeyEvent.CHAR_UNDEFINED);
+
+        assertTrue(((KeyEventDispatcher)bar).dispatchKeyEvent(event));
+
+        assertSame(first, manager.getActiveTab());
         assertTrue(event.isConsumed());
     }
 
@@ -454,6 +588,39 @@ class PaistiClientTabBarTest {
         MouseEvent event = new MouseEvent(bar, MouseEvent.MOUSE_CLICKED, System.currentTimeMillis(), 0,
                 rect.x + (rect.width / 2), rect.y + (rect.height / 2), 1, false, button);
         bar.dispatchEvent(event);
+    }
+
+    private static void move(PaistiClientTabBar bar, PaistiClientTabBar.HitRegion region) {
+        Rectangle rect = region.rect;
+        MouseEvent event = new MouseEvent(bar, MouseEvent.MOUSE_MOVED, System.currentTimeMillis(), 0,
+                rect.x + (rect.width / 2), rect.y + (rect.height / 2), 0, false);
+        bar.dispatchEvent(event);
+    }
+
+    private static void pressRelease(PaistiClientTabBar bar, PaistiClientTabBar.HitRegion region) {
+        Rectangle rect = region.rect;
+        int x = rect.x + (rect.width / 2);
+        int y = rect.y + (rect.height / 2);
+        bar.dispatchEvent(new MouseEvent(bar, MouseEvent.MOUSE_PRESSED, System.currentTimeMillis(), 0,
+                x, y, 1, false, MouseEvent.BUTTON1));
+        bar.dispatchEvent(new MouseEvent(bar, MouseEvent.MOUSE_RELEASED, System.currentTimeMillis(), 0,
+                x, y, 1, false, MouseEvent.BUTTON1));
+    }
+
+    private static void pressReleaseClick(PaistiClientTabBar bar, PaistiClientTabBar.HitRegion pressRegion,
+                                          PaistiClientTabBar.HitRegion releaseRegion) {
+        Rectangle press = pressRegion.rect;
+        Rectangle release = releaseRegion.rect;
+        int pressX = press.x + (press.width / 2);
+        int pressY = press.y + (press.height / 2);
+        int releaseX = release.x + (release.width / 2);
+        int releaseY = release.y + (release.height / 2);
+        bar.dispatchEvent(new MouseEvent(bar, MouseEvent.MOUSE_PRESSED, System.currentTimeMillis(), 0,
+                pressX, pressY, 1, false, MouseEvent.BUTTON1));
+        bar.dispatchEvent(new MouseEvent(bar, MouseEvent.MOUSE_RELEASED, System.currentTimeMillis(), 0,
+                releaseX, releaseY, 1, false, MouseEvent.BUTTON1));
+        bar.dispatchEvent(new MouseEvent(bar, MouseEvent.MOUSE_CLICKED, System.currentTimeMillis(), 0,
+                releaseX, releaseY, 1, false, MouseEvent.BUTTON1));
     }
 
     private static String repeat(String text, int count) {

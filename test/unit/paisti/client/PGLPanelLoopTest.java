@@ -237,6 +237,24 @@ class PGLPanelLoopTest {
 
     @Test
     @Tag("unit")
+    void activePendingLoginTabDoesNotKeepDrawingPreviousSession() throws Exception {
+        DummyPanel panel = new DummyPanel();
+        TestLoop loop = new TestLoop(panel);
+        PaistiClientTabManager manager = PaistiClientTabManager.getInstance();
+        SessionFixture session = newContext(panel, "session");
+        manager.addSessionTab(session.context);
+        loop.setLoopUi(session.ui);
+
+        PaistiClientTab pending = manager.addPendingLoginTab();
+        manager.activateTab(pending);
+
+        UI synced = loop.exposeSyncActiveUi(loop.currentUi());
+
+        assertNull(synced, "active pending login tab must blank stale session UI until Bootstrap hydrates it");
+    }
+
+    @Test
+    @Tag("unit")
     void backgroundReturnClosesOldAndReturnedSessionsWithoutDisposal() throws Exception {
         DummyPanel panel = new DummyPanel();
         TestLoop loop = new TestLoop(panel);

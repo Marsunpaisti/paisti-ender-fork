@@ -5,6 +5,7 @@ import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.event.MouseMotionAdapter;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -17,7 +18,10 @@ public class PaistiClientTabBar extends Panel implements KeyEventDispatcher {
     static final String ADD_LABEL = "+ Add new tab";
     static final Color BG = new Color(28, 31, 36);
     static final Color ACTIVE_BG = new Color(64, 103, 150);
+    static final Color ACTIVE_HOVER_BG = new Color(74, 116, 166);
     static final Color INACTIVE_BG = new Color(48, 52, 59);
+    static final Color INACTIVE_HOVER_BG = new Color(58, 63, 72);
+    static final Color CLOSE_HOVER_BG = new Color(78, 83, 92);
     static final Color FG = new Color(235, 238, 242);
     static final Color MUTED_FG = new Color(178, 184, 191);
 
@@ -38,6 +42,10 @@ public class PaistiClientTabBar extends Panel implements KeyEventDispatcher {
     private final PaistiClientTabManager manager;
     private final Component gameComponent;
     private final PaistiClientTabManager.Listener listener = this::scheduleRepaint;
+    private boolean hasHoverPoint;
+    private int hoverX, hoverY;
+    private HitRegion pressedRegion;
+    private boolean suppressNextClicked;
 
     public PaistiClientTabBar(PaistiClientTabManager manager, Component gameComponent) {
         this.manager = manager;
@@ -45,10 +53,47 @@ public class PaistiClientTabBar extends Panel implements KeyEventDispatcher {
         setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 13));
         addMouseListener(new MouseAdapter() {
             @Override
+            public void mousePressed(MouseEvent e) {
+                suppressNextClicked = false;
+                pressedRegion = null;
+                if(e.getButton() != MouseEvent.BUTTON1 || e.isPopupTrigger())
+                    return;
+                suppressNextClicked = true;
+                pressedRegion = hitRegion(e.getX(), e.getY());
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                if(e.getButton() != MouseEvent.BUTTON1 || e.isPopupTrigger()) {
+                    pressedRegion = null;
+                    return;
+                }
+                HitRegion releasedRegion = hitRegion(e.getX(), e.getY());
+                if(sameRegion(pressedRegion, releasedRegion) && releasedRegion != null)
+                    activate(releasedRegion);
+                pressedRegion = null;
+            }
+
+            @Override
             public void mouseClicked(MouseEvent e) {
+                if(suppressNextClicked) {
+                    suppressNextClicked = false;
+                    return;
+                }
                 if(e.getButton() != MouseEvent.BUTTON1 || e.isPopupTrigger())
                     return;
                 click(e.getX(), e.getY());
+            }
+
+            @Override
+            public void mouseExited(MouseEvent e) {
+                clearHover();
+            }
+        });
+        addMouseMotionListener(new MouseMotionAdapter() {
+            @Override
+            public void mouseMoved(MouseEvent e) {
+                updateHover(e.getX(), e.getY());
             }
         });
     }
@@ -79,14 +124,20 @@ public class PaistiClientTabBar extends Panel implements KeyEventDispatcher {
         g.setColor(BG);
         g.fillRect(0, 0, w, h);
         g.setFont(getFont());
+        HitRegion hovered = hoveredRegion();
         for(HitRegion region : layoutRegionsForTests(w, h)) {
             if(region.kind == HitKind.ADD)
-                paintAddTab(g, region.rect);
+                paintAddTab(g, region.rect, hovered);
             else if(region.kind == HitKind.CLOSE)
-                paintClose(g, region.rect);
+                paintClose(g, region.rect, region.tab, hovered);
             else
-                paintTab(g, region.rect, region.tab);
+                paintTab(g, region.rect, region.tab, hovered);
         }
+    }
+
+    @Override
+    public void update(Graphics g) {
+        paint(g);
     }
 
     public List<HitRegion> layoutRegionsForTests(int width, int height) {
@@ -119,36 +170,102 @@ public class PaistiClientTabBar extends Panel implements KeyEventDispatcher {
         return new Rectangle(tabRect.x + tabRect.width - size - 6, tabRect.y + (tabRect.height - size) / 2, size, size);
     }
 
+    private HitRegion hitRegion(int x, int y) {
+        return hitRegion(layoutRegionsForTests(getWidth(), getHeight()), x, y);
+    }
+
+    private HitRegion hitRegion(List<HitRegion> regions, int x, int y) {
+        for(HitRegion region : regions) {
+            if(region.kind == HitKind.CLOSE && region.rect.contains(x, y))
+                return region;
+        }
+        for(HitRegion region : regions) {
+            if(region.kind != HitKind.CLOSE && region.rect.contains(x, y))
+                return region;
+        }
+        return null;
+    }
+
+    private HitRegion hoveredRegion() {
+        return hasHoverPoint ? hitRegion(hoverX, hoverY) : null;
+    }
+
+    private void updateHover(int x, int y) {
+        HitRegion prev = hoveredRegion();
+        hasHoverPoint = true;
+        hoverX = x;
+        hoverY = y;
+        HitRegion next = hoveredRegion();
+        if(sameRegion(prev, next))
+            return;
+        repaint();
+    }
+
+    private void clearHover() {
+        if(!hasHoverPoint)
+            return;
+        hasHoverPoint = false;
+        repaint();
+    }
+
+    private boolean sameRegion(HitRegion a, HitRegion b) {
+        if(a == b)
+            return true;
+        if(a == null || b == null)
+            return false;
+        return a.kind == b.kind && a.tab == b.tab;
+    }
+
+    HitKind hoveredKindForTests() {
+        HitRegion hovered = hoveredRegion();
+        return hovered == null ? null : hovered.kind;
+    }
+
+    PaistiClientTab hoveredTabForTests() {
+        HitRegion hovered = hoveredRegion();
+        return hovered == null ? null : hovered.tab;
+    }
+
     private boolean isVisibleTab(PaistiClientTab tab) {
         return tab.isSelectable() || tab.isLogin();
     }
 
     private void click(int x, int y) {
-        List<HitRegion> regions = layoutRegionsForTests(getWidth(), getHeight());
-        for(HitRegion region : regions) {
-            if(region.kind != HitKind.CLOSE || !region.rect.contains(x, y))
-                continue;
+        HitRegion region = hitRegion(x, y);
+        if(region != null)
+            activate(region);
+    }
+
+    private void activate(HitRegion region) {
+        if(region.kind == HitKind.CLOSE) {
             manager.closeTab(region.tab);
             refocusGame();
             repaint();
             return;
+        } else if(region.kind == HitKind.ADD) {
+            manager.requestNewLoginTab();
+        } else if(region.kind == HitKind.TAB) {
+            manager.activateTab(region.tab);
         }
-        for(HitRegion region : regions) {
-            if(!region.rect.contains(x, y))
-                continue;
-            if(region.kind == HitKind.ADD)
-                manager.requestNewLoginTab();
-            else if(region.kind == HitKind.TAB)
-                manager.activateTab(region.tab);
-            refocusGame();
-            repaint();
-            return;
-        }
+        refocusGame();
+        repaint();
     }
 
     @Override
     public boolean dispatchKeyEvent(KeyEvent e) {
-        if(e.getID() != KeyEvent.KEY_PRESSED || !isClientTabShortcut(e))
+        if(e.getID() != KeyEvent.KEY_PRESSED)
+            return(false);
+        if(isCtrlTabShortcut(e)) {
+            if((e.getModifiersEx() & InputEvent.SHIFT_DOWN_MASK) != 0)
+                manager.switchToPrevious();
+            else
+                manager.switchToNext();
+            e.consume();
+            refocusGame();
+            repaint();
+            return(true);
+        }
+        if(!isClientTabShortcut(e))
             return(false);
         switch(e.getKeyCode()) {
         case KeyEvent.VK_UP:
@@ -179,23 +296,37 @@ public class PaistiClientTabBar extends Panel implements KeyEventDispatcher {
         return((mods & required) == required && (mods & excluded) == 0);
     }
 
-    private void paintAddTab(Graphics g, Rectangle r) {
-        g.setColor(INACTIVE_BG);
+    private boolean isCtrlTabShortcut(KeyEvent e) {
+        int mods = e.getModifiersEx();
+        int required = InputEvent.CTRL_DOWN_MASK;
+        int excluded = InputEvent.ALT_DOWN_MASK | InputEvent.ALT_GRAPH_DOWN_MASK | InputEvent.META_DOWN_MASK;
+        return(e.getKeyCode() == KeyEvent.VK_TAB && (mods & required) == required && (mods & excluded) == 0);
+    }
+
+    private void paintAddTab(Graphics g, Rectangle r, HitRegion hovered) {
+        boolean hover = hovered != null && hovered.kind == HitKind.ADD;
+        g.setColor(hover ? INACTIVE_HOVER_BG : INACTIVE_BG);
         g.fillRoundRect(r.x, r.y, r.width, r.height, 8, 8);
-        g.setColor(FG);
+        g.setColor(hover ? FG : MUTED_FG);
         drawCentered(g, ADD_LABEL, r);
     }
 
-    private void paintClose(Graphics g, Rectangle r) {
-        g.setColor(MUTED_FG);
+    private void paintClose(Graphics g, Rectangle r, PaistiClientTab tab, HitRegion hovered) {
+        boolean hover = hovered != null && hovered.kind == HitKind.CLOSE && hovered.tab == tab;
+        if(hover) {
+            g.setColor(CLOSE_HOVER_BG);
+            g.fillRoundRect(r.x, r.y, r.width, r.height, 6, 6);
+        }
+        g.setColor(hover ? FG : MUTED_FG);
         drawCentered(g, "x", r);
     }
 
-    private void paintTab(Graphics g, Rectangle r, PaistiClientTab tab) {
+    private void paintTab(Graphics g, Rectangle r, PaistiClientTab tab, HitRegion hovered) {
         boolean active = manager.getActiveTab() == tab;
-        g.setColor(active ? ACTIVE_BG : INACTIVE_BG);
+        boolean hover = hovered != null && hovered.kind == HitKind.TAB && hovered.tab == tab;
+        g.setColor(active ? (hover ? ACTIVE_HOVER_BG : ACTIVE_BG) : (hover ? INACTIVE_HOVER_BG : INACTIVE_BG));
         g.fillRoundRect(r.x, r.y, r.width, r.height, 8, 8);
-        g.setColor(active ? FG : MUTED_FG);
+        g.setColor((active || hover) ? FG : MUTED_FG);
         FontMetrics fm = g.getFontMetrics();
         String label = fitLabel(tab.label(), fm, r.width - CLOSE_W - 24);
         g.drawString(label, r.x + 8, r.y + ((r.height - fm.getHeight()) / 2) + fm.getAscent());

@@ -36,8 +36,9 @@ public class PGLPanelLoop extends GLPanel.Loop {
     @Override
     protected UI syncActiveUi(UI current) {
 	PaistiClientTabManager manager = PaistiClientTabManager.getInstance();
-	UI active = manager.getActiveUi();
-	if(active != null && active != current)
+	// Pending login tabs are active before Bootstrap hydrates their UI.
+	UI active = manager.getActiveUiOrDefault(current);
+	if(active != current)
 	    return(active);
 	return(current);
     }
