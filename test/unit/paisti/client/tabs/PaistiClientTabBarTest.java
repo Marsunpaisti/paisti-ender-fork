@@ -18,16 +18,15 @@ import sun.misc.Unsafe;
 
 import java.awt.Canvas;
 import java.awt.Component;
+import java.awt.Container;
 import java.awt.Dimension;
 import java.awt.KeyEventDispatcher;
-import java.awt.Rectangle;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
 import java.lang.reflect.Field;
 import java.time.Duration;
-import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -39,6 +38,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 class PaistiClientTabBarTest {
+    private double savedScale;
+
     private static final class DummyPanel extends Canvas implements GLPanel {
         @Override
         public GLEnvironment env() {
@@ -131,23 +132,17 @@ class PaistiClientTabBarTest {
         }
     }
 
-    private static final class PaintProbeTabBar extends PaistiClientTabBar {
-        private int paintCalls;
-
-        private PaintProbeTabBar(PaistiClientTabManager manager) {
-            super(manager, new Canvas());
-        }
-
-        @Override
-        public void paint(java.awt.Graphics g) {
-            paintCalls++;
-        }
+    @BeforeEach
+    void setup() throws Exception {
+        savedScale = getStaticDouble(UI.class, "scalef");
+        setStaticDouble(UI.class, "scalef", 1.0);
+        PaistiClientTabManager.getInstance().clearForTests();
     }
 
-    @BeforeEach
     @AfterEach
-    void clearTabs() {
+    void tearDown() throws Exception {
         PaistiClientTabManager.getInstance().clearForTests();
+        setStaticDouble(UI.class, "scalef", savedScale);
     }
 
     @Test
@@ -157,21 +152,38 @@ class PaistiClientTabBarTest {
 
         Dimension size = bar.getPreferredSize();
 
-        assertTrue(size.height >= 30, "tab bar should be taller than tiny native buttons");
+        assertEquals(24, size.height, "tab bar should be compact without shrinking below readable tab controls");
     }
 
     @Test
     @Tag("unit")
-    void snapshotContainsAddCloseAndTabRegionsWithoutNativeButtons() {
+    void dimensionsAndFontFollowHavenUiScale() throws Exception {
+        double oldScale = getStaticDouble(UI.class, "scalef");
+        try {
+            setStaticDouble(UI.class, "scalef", 2.0);
+            PaistiClientTabManager manager = PaistiClientTabManager.getInstance();
+            manager.addLoginTab(new TestUI());
+
+            PaistiClientTabBar bar = new PaistiClientTabBar(manager, new Canvas());
+
+            assertEquals(UI.scale(PaistiClientTabBar.HEIGHT), bar.getPreferredSize().height);
+            assertEquals(UI.scale(13), Math.round(bar.getFont().getSize2D()));
+            assertEquals(UI.scale(PaistiClientTabBar.ADD_TAB_W), addButton(bar).getPreferredSize().width);
+        } finally {
+            setStaticDouble(UI.class, "scalef", oldScale);
+        }
+    }
+
+    @Test
+    @Tag("unit")
+    void snapshotContainsSwingTabCloseAndAddButtonsWithoutNativeButtons() {
         PaistiClientTabManager manager = PaistiClientTabManager.getInstance();
-        manager.addLoginTab(new TestUI());
+        PaistiClientTab tab = manager.addLoginTab(new TestUI());
         PaistiClientTabBar bar = new PaistiClientTabBar(manager, new Canvas());
 
-        List<PaistiClientTabBar.HitRegion> regions = bar.layoutRegionsForTests(320, 34);
-
-        assertTrue(regions.stream().anyMatch(r -> r.kind == PaistiClientTabBar.HitKind.ADD));
-        assertTrue(regions.stream().anyMatch(r -> r.kind == PaistiClientTabBar.HitKind.CLOSE));
-        assertTrue(regions.stream().anyMatch(r -> r.kind == PaistiClientTabBar.HitKind.TAB));
+        assertSame(tab, tabButtonFor(bar, tab).getClientProperty(PaistiClientTabBar.TAB_PROPERTY));
+        assertSame(tab, closeButtonFor(bar, tab).getClientProperty(PaistiClientTabBar.CLOSE_TAB_PROPERTY));
+        assertSame(Boolean.TRUE, addButton(bar).getClientProperty(PaistiClientTabBar.ADD_TAB_PROPERTY));
         for(Component child : bar.getComponents())
             assertFalse(child instanceof java.awt.Button, "tab bar must not use native AWT Button controls");
     }
@@ -184,44 +196,96 @@ class PaistiClientTabBarTest {
         manager.addLoginTab(new TestUI());
         PaistiClientTabBar bar = new PaistiClientTabBar(manager, new Canvas());
 
-        List<PaistiClientTabBar.HitRegion> regions = bar.layoutRegionsForTests(320, 34);
-
-        assertTrue(regions.stream().anyMatch(r -> r.kind == PaistiClientTabBar.HitKind.TAB && r.tab == pending),
+        assertSame(pending, tabButtonFor(bar, pending).getClientProperty(PaistiClientTabBar.TAB_PROPERTY),
                 "pending login tabs must be visible even before their UI exists");
     }
 
     @Test
     @Tag("unit")
-    void addRegionIsTrailingTabShapedEntry() {
-        PaistiClientTabManager manager = PaistiClientTabManager.getInstance();
-        manager.addLoginTab(new TestUI());
-        manager.addLoginTab(new TestUI());
-        PaistiClientTabBar bar = new PaistiClientTabBar(manager, new Canvas());
-
-        List<PaistiClientTabBar.HitRegion> regions = bar.layoutRegionsForTests(420, 34);
-        PaistiClientTabBar.HitRegion add = firstRegion(regions, PaistiClientTabBar.HitKind.ADD);
-        int rightMostTabEdge = regions.stream()
-                .filter(r -> r.kind == PaistiClientTabBar.HitKind.TAB)
-                .mapToInt(r -> r.rect.x + r.rect.width)
-                .max()
-                .orElseThrow(AssertionError::new);
-
-        assertTrue(add.rect.x > rightMostTabEdge, "add tab should appear after visible tabs");
-        assertTrue(add.rect.width >= PaistiClientTabBar.TAB_MIN_W, "add tab should be tab-shaped, not a small square button");
-    }
-
-    @Test
-    @Tag("unit")
-    void closeRegionsAreInsideTheirTabs() {
+    void addButtonIsTrailingTabShapedEntry() {
         PaistiClientTabManager manager = PaistiClientTabManager.getInstance();
         PaistiClientTab first = manager.addLoginTab(new TestUI());
         PaistiClientTab second = manager.addLoginTab(new TestUI());
         PaistiClientTabBar bar = new PaistiClientTabBar(manager, new Canvas());
 
-        List<PaistiClientTabBar.HitRegion> regions = bar.layoutRegionsForTests(420, 34);
+        assertTrue(componentIndex(bar, addButton(bar)) > componentIndex(bar, tabComponentFor(bar, second)),
+                "add tab should appear after visible tabs");
+        assertTrue(addButton(bar).getPreferredSize().width >= PaistiClientTabBar.TAB_MIN_W,
+                "add tab should be tab-shaped, not a small square button");
+        assertTrue(componentIndex(bar, tabComponentFor(bar, second)) > componentIndex(bar, tabComponentFor(bar, first)));
+    }
 
-        assertTrue(regionForTab(regions, first).rect.contains(regionForCloseTab(regions, first).rect));
-        assertTrue(regionForTab(regions, second).rect.contains(regionForCloseTab(regions, second).rect));
+    @Test
+    @Tag("unit")
+    void closeButtonsFollowTheirTabs() {
+        PaistiClientTabManager manager = PaistiClientTabManager.getInstance();
+        PaistiClientTab first = manager.addLoginTab(new TestUI());
+        PaistiClientTab second = manager.addLoginTab(new TestUI());
+        PaistiClientTabBar bar = new PaistiClientTabBar(manager, new Canvas());
+
+        assertEquals(componentIndex(bar, tabComponentFor(bar, first)) + 1, componentIndex(bar, tabComponentFor(bar, second)));
+        assertSame(tabComponentFor(bar, first), closeButtonFor(bar, first).getParent());
+        assertSame(tabComponentFor(bar, second), closeButtonFor(bar, second).getParent());
+    }
+
+    @Test
+    @Tag("unit")
+    void closeButtonIsNestedInsideItsTabComponent() {
+        PaistiClientTabManager manager = PaistiClientTabManager.getInstance();
+        PaistiClientTab tab = manager.addLoginTab(new TestUI());
+        PaistiClientTabBar bar = new PaistiClientTabBar(manager, new Canvas());
+
+        assertSame(tabComponentFor(bar, tab), closeButtonFor(bar, tab).getParent());
+    }
+
+    @Test
+    @Tag("unit")
+    void flatlafButtonStylesDoNotUseUnsupportedKeys() {
+        PaistiClientTabManager manager = PaistiClientTabManager.getInstance();
+        manager.addLoginTab(new TestUI());
+        PaistiClientTabBar bar = new PaistiClientTabBar(manager, new Canvas());
+
+        for(javax.swing.JButton button : allButtons(bar)) {
+            Object style = button.getClientProperty("FlatLaf.style");
+            String text = style == null ? "" : style.toString();
+            assertFalse(text.contains("arc:"));
+            assertFalse(text.contains("borderWidth:"));
+            assertFalse(text.contains("focusWidth:"));
+            assertFalse(text.contains("innerFocusWidth:"));
+        }
+    }
+
+    @Test
+    @Tag("unit")
+    void constrainedLayoutKeepsButtonsOnOneRowInsideBarBounds() {
+        PaistiClientTabManager manager = PaistiClientTabManager.getInstance();
+        manager.addLoginTab(new TestUI());
+        manager.addLoginTab(new TestUI());
+        manager.addLoginTab(new TestUI());
+        PaistiClientTabBar bar = sizedBar(manager, new Canvas());
+
+        bar.doLayout();
+
+        for(Component component : bar.getComponents()) {
+            assertTrue(component.getY() >= 0);
+            assertTrue(component.getY() + component.getHeight() <= bar.getHeight());
+            assertTrue(component.getX() >= 0);
+            assertTrue(component.getX() + component.getWidth() <= bar.getWidth());
+        }
+    }
+
+    @Test
+    @Tag("unit")
+    void tabComponentsAreFlushWithChromeAndGameCanvasEdges() {
+        PaistiClientTabManager manager = PaistiClientTabManager.getInstance();
+        PaistiClientTab tab = manager.addLoginTab(new TestUI());
+        PaistiClientTabBar bar = sizedBar(manager, new Canvas());
+
+        bar.doLayout();
+
+        Container tabComponent = tabComponentFor(bar, tab);
+        assertEquals(0, tabComponent.getY(), "tab should touch the window chrome edge");
+        assertEquals(bar.getHeight(), tabComponent.getHeight(), "tab should touch the game canvas edge");
     }
 
     @Test
@@ -235,7 +299,7 @@ class PaistiClientTabBarTest {
         FocusProbe focus = new FocusProbe();
         PaistiClientTabBar bar = sizedBar(manager, focus);
 
-        click(bar, regionForCloseTab(bar, second));
+        closeButtonFor(bar, second).doClick();
 
         assertSame(first, manager.getActiveTab());
         assertFalse(manager.getTabs().contains(second));
@@ -245,42 +309,51 @@ class PaistiClientTabBarTest {
 
     @Test
     @Tag("unit")
-    void mouseMoveTracksHoveredTab() {
+    void middleClickingTabClosesItAndRefocusesGame() {
         PaistiClientTabManager manager = PaistiClientTabManager.getInstance();
-        PaistiClientTab tab = manager.addLoginTab(new TestUI());
-        PaistiClientTabBar bar = sizedBar(manager, new Canvas());
+        PaistiClientTab first = manager.addLoginTab(new TestUI());
+        TestUI secondUi = new TestUI();
+        PaistiClientTab second = manager.addLoginTab(secondUi);
+        manager.activateTab(first);
+        FocusProbe focus = new FocusProbe();
+        PaistiClientTabBar bar = sizedBar(manager, focus);
 
-        move(bar, regionForTab(bar, tab));
+        middleClick(tabButtonFor(bar, second));
 
-        assertSame(tab, bar.hoveredTabForTests());
-        assertEquals(PaistiClientTabBar.HitKind.TAB, bar.hoveredKindForTests());
+        assertSame(first, manager.getActiveTab());
+        assertFalse(manager.getTabs().contains(second));
+        assertEquals(1, secondUi.destroyCalls);
+        assertEquals(1, focus.focusInWindowCalls);
+        assertEquals(0, focus.focusCalls);
     }
 
     @Test
     @Tag("unit")
-    void mouseMovePrefersCloseHoverOverContainingTab() {
+    void tabBarUsesSwingButtonsForTabsAndAddAction() {
         PaistiClientTabManager manager = PaistiClientTabManager.getInstance();
-        PaistiClientTab tab = manager.addLoginTab(new TestUI());
+        PaistiClientTab first = manager.addLoginTab(new TestUI());
+        manager.addLoginTab(new TestUI());
         PaistiClientTabBar bar = sizedBar(manager, new Canvas());
 
-        move(bar, regionForCloseTab(bar, tab));
-
-        assertSame(tab, bar.hoveredTabForTests());
-        assertEquals(PaistiClientTabBar.HitKind.CLOSE, bar.hoveredKindForTests());
+        assertTrue(javax.swing.JPanel.class.isInstance(bar));
+        assertTrue(tabButtonFor(bar, first) instanceof javax.swing.JButton);
+        assertTrue(addButton(bar) instanceof javax.swing.JButton);
     }
 
     @Test
     @Tag("unit")
-    void mouseExitClearsHoverState() {
+    void swingTabButtonActivatesClickedTabAndRefocusesGame() {
         PaistiClientTabManager manager = PaistiClientTabManager.getInstance();
-        PaistiClientTab tab = manager.addLoginTab(new TestUI());
-        PaistiClientTabBar bar = sizedBar(manager, new Canvas());
+        PaistiClientTab first = manager.addLoginTab(new TestUI());
+        PaistiClientTab second = manager.addLoginTab(new TestUI());
+        manager.activateTab(first);
+        FocusProbe focus = new FocusProbe();
+        PaistiClientTabBar bar = sizedBar(manager, focus);
 
-        move(bar, regionForTab(bar, tab));
-        bar.dispatchEvent(new MouseEvent(bar, MouseEvent.MOUSE_EXITED, System.currentTimeMillis(), 0, -1, -1, 0, false));
+        tabButtonFor(bar, second).doClick();
 
-        assertSame(null, bar.hoveredTabForTests());
-        assertSame(null, bar.hoveredKindForTests());
+        assertSame(second, manager.getActiveTab());
+        assertEquals(1, focus.focusInWindowCalls);
     }
 
     @Test
@@ -295,21 +368,6 @@ class PaistiClientTabBarTest {
         bar.paint(img.getGraphics());
 
         assertEquals(320, img.getWidth());
-    }
-
-    @Test
-    @Tag("unit")
-    void updatePaintsWithoutClearingBackgroundFirst() {
-        PaintProbeTabBar bar = new PaintProbeTabBar(PaistiClientTabManager.getInstance());
-        bar.setSize(20, 20);
-        bar.setBackground(java.awt.Color.GREEN);
-        BufferedImage img = new BufferedImage(20, 20, BufferedImage.TYPE_INT_ARGB);
-        img.setRGB(0, 0, java.awt.Color.MAGENTA.getRGB());
-
-        bar.update(img.getGraphics());
-
-        assertEquals(1, bar.paintCalls);
-        assertEquals(java.awt.Color.MAGENTA.getRGB(), img.getRGB(0, 0));
     }
 
     @Test
@@ -343,7 +401,7 @@ class PaistiClientTabBarTest {
         });
         waiter.start();
 
-        click(bar, firstRegion(bar, PaistiClientTabBar.HitKind.ADD));
+        addButton(bar).doClick();
 
         assertTrue(released.await(2, TimeUnit.SECONDS), "add hit region must request a login tab");
         assertEquals(1, focus.focusInWindowCalls);
@@ -360,7 +418,7 @@ class PaistiClientTabBarTest {
         FocusProbe focus = new FocusProbe();
         PaistiClientTabBar bar = sizedBar(manager, focus);
 
-        click(bar, firstRegion(bar, PaistiClientTabBar.HitKind.CLOSE));
+        closeButtonFor(bar, manager.getActiveTab()).doClick();
 
         assertEquals(1, manager.getTabs().size());
         assertTrue(manager.getActiveTab().isLogin());
@@ -379,42 +437,10 @@ class PaistiClientTabBarTest {
         FocusProbe focus = new FocusProbe();
         PaistiClientTabBar bar = sizedBar(manager, focus);
 
-        click(bar, regionForTab(bar, second));
+        tabButtonFor(bar, second).doClick();
 
         assertSame(second, manager.getActiveTab());
         assertEquals(1, focus.focusInWindowCalls);
-    }
-
-    @Test
-    @Tag("unit")
-    void tabPressReleaseActivatesTabWithoutClickedEvent() {
-        PaistiClientTabManager manager = PaistiClientTabManager.getInstance();
-        PaistiClientTab first = manager.addLoginTab(new TestUI());
-        PaistiClientTab second = manager.addLoginTab(new TestUI());
-        manager.activateTab(first);
-        FocusProbe focus = new FocusProbe();
-        PaistiClientTabBar bar = sizedBar(manager, focus);
-
-        pressRelease(bar, regionForTab(bar, second));
-
-        assertSame(second, manager.getActiveTab());
-        assertEquals(1, focus.focusInWindowCalls);
-    }
-
-    @Test
-    @Tag("unit")
-    void mismatchedPressReleaseSuppressesFollowingClickedEvent() {
-        PaistiClientTabManager manager = PaistiClientTabManager.getInstance();
-        PaistiClientTab first = manager.addLoginTab(new TestUI());
-        PaistiClientTab second = manager.addLoginTab(new TestUI());
-        manager.activateTab(first);
-        FocusProbe focus = new FocusProbe();
-        PaistiClientTabBar bar = sizedBar(manager, focus);
-
-        pressReleaseClick(bar, regionForTab(bar, first), regionForTab(bar, second));
-
-        assertSame(first, manager.getActiveTab());
-        assertEquals(0, focus.focusInWindowCalls);
     }
 
     @Test
@@ -427,7 +453,7 @@ class PaistiClientTabBarTest {
         FocusProbe focus = new FocusProbe();
         PaistiClientTabBar bar = sizedBar(manager, focus);
 
-        click(bar, regionForTab(bar, second));
+        tabButtonFor(bar, second).doClick();
 
         assertSame(second, manager.getActiveTab());
         assertEquals(1, focus.focusInWindowCalls);
@@ -507,9 +533,9 @@ class PaistiClientTabBarTest {
         });
         waiter.start();
 
-        click(bar, firstRegion(bar, PaistiClientTabBar.HitKind.ADD), MouseEvent.BUTTON3);
-        click(bar, firstRegion(bar, PaistiClientTabBar.HitKind.CLOSE), MouseEvent.BUTTON3);
-        click(bar, regionForTab(bar, second), MouseEvent.BUTTON3);
+        rightClick(addButton(bar));
+        rightClick(closeButtonFor(bar, first));
+        rightClick(tabButtonFor(bar, second));
 
         assertFalse(released.await(150, TimeUnit.MILLISECONDS), "right-click must not request a login tab");
         waiter.interrupt();
@@ -546,81 +572,93 @@ class PaistiClientTabBarTest {
         return bar;
     }
 
-    private static PaistiClientTabBar.HitRegion firstRegion(PaistiClientTabBar bar, PaistiClientTabBar.HitKind kind) {
-        return firstRegion(bar.layoutRegionsForTests(bar.getWidth(), bar.getHeight()), kind);
+    private static int componentIndex(Container root, Component target) {
+        Component[] components = root.getComponents();
+        for(int i = 0; i < components.length; i++) {
+            if(components[i] == target)
+                return i;
+        }
+        throw new AssertionError("Component not found: " + target);
     }
 
-    private static PaistiClientTabBar.HitRegion firstRegion(List<PaistiClientTabBar.HitRegion> regions, PaistiClientTabBar.HitKind kind) {
-        return regions.stream()
-                .filter(region -> region.kind == kind)
-                .findFirst()
-                .orElseThrow(AssertionError::new);
+    private static void rightClick(Component component) {
+        component.dispatchEvent(new MouseEvent(component, MouseEvent.MOUSE_CLICKED, System.currentTimeMillis(), 0,
+                1, 1, 1, false, MouseEvent.BUTTON3));
     }
 
-    private static PaistiClientTabBar.HitRegion regionForTab(PaistiClientTabBar bar, PaistiClientTab tab) {
-        return regionForTab(bar.layoutRegionsForTests(bar.getWidth(), bar.getHeight()), tab);
+    private static void middleClick(Component component) {
+        component.dispatchEvent(new MouseEvent(component, MouseEvent.MOUSE_CLICKED, System.currentTimeMillis(), 0,
+                1, 1, 1, false, MouseEvent.BUTTON2));
     }
 
-    private static PaistiClientTabBar.HitRegion regionForTab(List<PaistiClientTabBar.HitRegion> regions, PaistiClientTab tab) {
-        return regions.stream()
-                .filter(region -> region.kind == PaistiClientTabBar.HitKind.TAB && region.tab == tab)
-                .findFirst()
-                .orElseThrow(AssertionError::new);
+    private static javax.swing.JButton tabButtonFor(PaistiClientTabBar bar, PaistiClientTab tab) {
+        return buttonWithProperty(bar, PaistiClientTabBar.TAB_PROPERTY, tab);
     }
 
-    private static PaistiClientTabBar.HitRegion regionForCloseTab(PaistiClientTabBar bar, PaistiClientTab tab) {
-        return regionForCloseTab(bar.layoutRegionsForTests(bar.getWidth(), bar.getHeight()), tab);
+    private static Container tabComponentFor(PaistiClientTabBar bar, PaistiClientTab tab) {
+        Component component = componentWithProperty(bar, PaistiClientTabBar.TAB_PROPERTY, tab);
+        if(component instanceof Container)
+            return (Container) component;
+        throw new AssertionError("Tab component is not a container: " + component);
     }
 
-    private static PaistiClientTabBar.HitRegion regionForCloseTab(List<PaistiClientTabBar.HitRegion> regions, PaistiClientTab tab) {
-        return regions.stream()
-                .filter(region -> region.kind == PaistiClientTabBar.HitKind.CLOSE && region.tab == tab)
-                .findFirst()
-                .orElseThrow(AssertionError::new);
+    private static javax.swing.JButton closeButtonFor(PaistiClientTabBar bar, PaistiClientTab tab) {
+        return buttonWithProperty(bar, PaistiClientTabBar.CLOSE_TAB_PROPERTY, tab);
     }
 
-    private static void click(PaistiClientTabBar bar, PaistiClientTabBar.HitRegion region) {
-        click(bar, region, MouseEvent.BUTTON1);
+    private static javax.swing.JButton addButton(PaistiClientTabBar bar) {
+        return buttonWithProperty(bar, PaistiClientTabBar.ADD_TAB_PROPERTY, Boolean.TRUE);
     }
 
-    private static void click(PaistiClientTabBar bar, PaistiClientTabBar.HitRegion region, int button) {
-        Rectangle rect = region.rect;
-        MouseEvent event = new MouseEvent(bar, MouseEvent.MOUSE_CLICKED, System.currentTimeMillis(), 0,
-                rect.x + (rect.width / 2), rect.y + (rect.height / 2), 1, false, button);
-        bar.dispatchEvent(event);
+    private static javax.swing.JButton buttonWithProperty(Container root, String key, Object value) {
+        javax.swing.JButton button = findButtonWithProperty(root, key, value);
+        if(button != null)
+            return button;
+        throw new AssertionError("No button with client property " + key + "=" + value);
     }
 
-    private static void move(PaistiClientTabBar bar, PaistiClientTabBar.HitRegion region) {
-        Rectangle rect = region.rect;
-        MouseEvent event = new MouseEvent(bar, MouseEvent.MOUSE_MOVED, System.currentTimeMillis(), 0,
-                rect.x + (rect.width / 2), rect.y + (rect.height / 2), 0, false);
-        bar.dispatchEvent(event);
+    private static Component componentWithProperty(Container root, String key, Object value) {
+        for(Component component : root.getComponents()) {
+            if(component instanceof javax.swing.JComponent && ((javax.swing.JComponent) component).getClientProperty(key) == value)
+                return component;
+            if(component instanceof Container) {
+                Component nested = componentWithProperty((Container) component, key, value);
+                if(nested != null)
+                    return nested;
+            }
+        }
+        return null;
     }
 
-    private static void pressRelease(PaistiClientTabBar bar, PaistiClientTabBar.HitRegion region) {
-        Rectangle rect = region.rect;
-        int x = rect.x + (rect.width / 2);
-        int y = rect.y + (rect.height / 2);
-        bar.dispatchEvent(new MouseEvent(bar, MouseEvent.MOUSE_PRESSED, System.currentTimeMillis(), 0,
-                x, y, 1, false, MouseEvent.BUTTON1));
-        bar.dispatchEvent(new MouseEvent(bar, MouseEvent.MOUSE_RELEASED, System.currentTimeMillis(), 0,
-                x, y, 1, false, MouseEvent.BUTTON1));
+    private static java.util.List<javax.swing.JButton> allButtons(Container root) {
+        java.util.List<javax.swing.JButton> buttons = new java.util.ArrayList<>();
+        collectButtons(root, buttons);
+        return buttons;
     }
 
-    private static void pressReleaseClick(PaistiClientTabBar bar, PaistiClientTabBar.HitRegion pressRegion,
-                                          PaistiClientTabBar.HitRegion releaseRegion) {
-        Rectangle press = pressRegion.rect;
-        Rectangle release = releaseRegion.rect;
-        int pressX = press.x + (press.width / 2);
-        int pressY = press.y + (press.height / 2);
-        int releaseX = release.x + (release.width / 2);
-        int releaseY = release.y + (release.height / 2);
-        bar.dispatchEvent(new MouseEvent(bar, MouseEvent.MOUSE_PRESSED, System.currentTimeMillis(), 0,
-                pressX, pressY, 1, false, MouseEvent.BUTTON1));
-        bar.dispatchEvent(new MouseEvent(bar, MouseEvent.MOUSE_RELEASED, System.currentTimeMillis(), 0,
-                releaseX, releaseY, 1, false, MouseEvent.BUTTON1));
-        bar.dispatchEvent(new MouseEvent(bar, MouseEvent.MOUSE_CLICKED, System.currentTimeMillis(), 0,
-                releaseX, releaseY, 1, false, MouseEvent.BUTTON1));
+    private static void collectButtons(Container root, java.util.List<javax.swing.JButton> buttons) {
+        for(Component component : root.getComponents()) {
+            if(component instanceof javax.swing.JButton)
+                buttons.add((javax.swing.JButton) component);
+            if(component instanceof Container)
+                collectButtons((Container) component, buttons);
+        }
+    }
+
+    private static javax.swing.JButton findButtonWithProperty(Container root, String key, Object value) {
+        for(Component component : root.getComponents()) {
+            if(component instanceof javax.swing.JButton) {
+                javax.swing.JButton button = (javax.swing.JButton) component;
+                if(button.getClientProperty(key) == value)
+                    return button;
+            }
+            if(component instanceof Container) {
+                javax.swing.JButton button = findButtonWithProperty((Container) component, key, value);
+                if(button != null)
+                    return button;
+            }
+        }
+        return null;
     }
 
     private static String repeat(String text, int count) {
@@ -641,15 +679,32 @@ class PaistiClientTabBarTest {
     }
 
     private static <T> T allocate(Class<T> cl) throws Exception {
+        return cl.cast(unsafe().allocateInstance(cl));
+    }
+
+    private static Unsafe unsafe() throws Exception {
         Field field = Unsafe.class.getDeclaredField("theUnsafe");
         field.setAccessible(true);
-        Unsafe unsafe = (Unsafe) field.get(null);
-        return cl.cast(unsafe.allocateInstance(cl));
+        return (Unsafe) field.get(null);
     }
 
     private static void setField(Class<?> owner, Object target, String name, Object value) throws Exception {
         Field field = owner.getDeclaredField(name);
         field.setAccessible(true);
         field.set(target, value);
+    }
+
+    private static double getStaticDouble(Class<?> owner, String name) throws Exception {
+        Field field = owner.getDeclaredField(name);
+        field.setAccessible(true);
+        Unsafe unsafe = unsafe();
+        return unsafe.getDouble(unsafe.staticFieldBase(field), unsafe.staticFieldOffset(field));
+    }
+
+    private static void setStaticDouble(Class<?> owner, String name, double value) throws Exception {
+        Field field = owner.getDeclaredField(name);
+        field.setAccessible(true);
+        Unsafe unsafe = unsafe();
+        unsafe.putDouble(unsafe.staticFieldBase(field), unsafe.staticFieldOffset(field), value);
     }
 }
